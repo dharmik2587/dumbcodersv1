@@ -175,7 +175,14 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
   const [idx, setIdx] = useState(0);
   const router = useRouter();
   const hackathons = useApiStore((s) => s.hackathons);
-  const builders = useStore((s) => s.builders); // Keep seed data for now
+  const apiBuilders = useApiStore((s) => s.builders);
+  const seedBuilders = useStore((s) => s.builders);
+  const builders = useMemo(() => {
+    const map = new Map<string, any>();
+    seedBuilders.forEach((b) => map.set(b.id, b));
+    apiBuilders.forEach((b) => map.set(b.id, b));
+    return Array.from(map.values());
+  }, [apiBuilders, seedBuilders]);
   const teams = useApiStore((s) => s.teams);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -197,16 +204,17 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
       href: `/hackathons/${h.id}`,
       meta: h.code,
     }));
-    const people = builders.slice(0, 40).map((b) => ({
-      label: `${b.name} — ${ROLE_LABEL[b.role as RoleKey]}`,
+    const people = builders.map((b) => ({
+      label: `${b.name} (${b.studentCode || b.handle || b.id.slice(0, 8)}) — ${ROLE_LABEL[b.role as RoleKey] ?? b.role}`,
       group: "Builders",
       href: `/b/${b.id}`,
-      meta: b.college,
+      meta: `${b.studentCode ?? ""} ${b.id} ${b.handle ?? ""} ${b.college ?? ""}`.trim(),
     }));
     const teamItems = teams.map((t) => ({
-      label: t.name,
+      label: `${t.name} (Team ID: ${t.id.slice(0, 8)})`,
       group: "Teams",
       href: `/teams/${t.id}`,
+      meta: `${t.id} ${t.hackathonId ?? ""}`.trim(),
     }));
     const all: { label: string; group: string; href: string; meta?: string }[] = [
       ...routes,
@@ -218,7 +226,8 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
       ? all.filter(
           (i) =>
             i.label.toLowerCase().includes(term) ||
-            (i.meta ?? "").toLowerCase().includes(term),
+            (i.meta ?? "").toLowerCase().includes(term) ||
+            i.href.toLowerCase().includes(term),
         )
       : all.slice(0, 8);
   }, [q, hackathons, builders, teams]);

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Inbox, Send, X, Loader2 } from "lucide-react";
+import { Check, Inbox, Send, X, Loader2, MessageSquare } from "lucide-react";
 import { byIdMap, useMe, useApiStore } from "@/client/store/apiStore";
 import { ROLE_LABEL, type RoleKey } from "@/client/types";
 import { teamCoverage } from "@/client/lib/matching";
@@ -19,6 +19,7 @@ import {
   SectionHead,
   StateDot,
   Tabs,
+  Modal,
 } from "@/components/ui";
 import { cn } from "@/client/utils/cn";
 
@@ -128,6 +129,7 @@ function RequestCard({
   const rejectRequest = useApiStore((s) => s.rejectRequest);
   const withdrawRequest = useApiStore((s) => s.withdrawRequest);
   const pushToast = useApiStore((s) => s.pushToast);
+  const me = useMe();
   const [acting, setActing] = useState(false);
 
   // Support both raw and joined shapes
@@ -172,6 +174,52 @@ function RequestCard({
       }
     } finally {
       setActing(false);
+    }
+  };
+
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [sendingMsg, setSendingMsg] = useState(false);
+
+  const loadChat = async () => {
+    if (!teamId) return;
+    setChatLoading(true);
+    try {
+      const res = await fetch(`/api/teams/${teamId}/messages`);
+      const data = await res.json();
+      if (data.success && data.data) {
+        setMessages(data.data);
+      }
+    } catch (e) {
+      console.error("Failed to load chat", e);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || !teamId || sendingMsg) return;
+    setSendingMsg(true);
+    try {
+      const res = await fetch(`/api/teams/${teamId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: chatInput.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setChatInput("");
+        await loadChat();
+      } else {
+        pushToast({ label: "Error", body: data.message || "Failed to send message", tone: "bad" });
+      }
+    } catch (e) {
+      pushToast({ label: "Error", body: "Could not send message", tone: "bad" });
+    } finally {
+      setSendingMsg(false);
     }
   };
 
@@ -228,13 +276,29 @@ function RequestCard({
         </Chip>
       </div>
 
-      <div className="mt-4 flex gap-2 border-t border-line pt-4">
-        {inbox ? (
-          status === "accepted" ? (
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-4">
+        {status === "accepted" ? (
+          <div className="flex w-full items-center justify-between">
             <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-mint">
               <Check size={11} /> added to roster
             </span>
-          ) : status === "rejected" ? (
+            {teamId ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setChatOpen(true);
+                  loadChat();
+                }}
+                className="flex items-center gap-1.5"
+              >
+                <MessageSquare size={12} className="text-accent" />
+                Chat
+              </Button>
+            ) : null}
+          </div>
+        ) : inbox ? (
+          status === "rejected" ? (
             <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-danger">
               <X size={11} /> declined
             </span>
@@ -276,6 +340,92 @@ function RequestCard({
           )
         )}
       </div>
+
+      {/* Team Chat Modal */}
+      {chatOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="flex h-[520px] w-full max-w-lg flex-col border border-line-strong bg-surface shadow-2xl">
+            <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+              <div>
+                <h3 className="font-mono text-[13px] uppercase tracking-wider text-fg">
+                  Chat · {team?.name ?? "Team"}
+                </h3>
+                <span className="font-mono text-[10px] text-fg3">
+                  Teammate: {person?.name ?? "Member"}
+                </span>
+              </div>
+              <button
+                onClick={() => setChatOpen(false)}
+                className="font-mono text-[13px] text-fg3 hover:text-fg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {chatLoading ? (
+                <div className="flex h-full items-center justify-center">
+                  <Loader2 size={18} className="animate-spin text-accent" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center text-center p-6 text-fg3">
+                  <MessageSquare size={28} className="mb-2 opacity-40 text-accent" />
+                  <p className="font-mono text-[12px]">No messages yet.</p>
+                  <p className="font-mono text-[10px] mt-1 text-fg3">
+                    Start collaborating with {person?.name ?? "your teammate"}!
+                  </p>
+                </div>
+              ) : (
+                messages.map((m) => {
+                  const isMe = m.userId === me.id;
+                  return (
+                    <div
+                      key={m.id}
+                      className={cn(
+                        "flex flex-col max-w-[80%]",
+                        isMe ? "ml-auto items-end" : "mr-auto items-start"
+                      )}
+                    >
+                      <span className="font-mono text-[9px] text-fg3 mb-1">
+                        {isMe ? "You" : m.authorName || m.authorUsername || "Teammate"} · {relTime(m.createdAt)}
+                      </span>
+                      <div
+                        className={cn(
+                          "px-3.5 py-2 text-[13px] leading-relaxed",
+                          isMe
+                            ? "bg-accent text-canvas"
+                            : "border border-line bg-raised text-fg"
+                        )}
+                      >
+                        {m.content}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <form onSubmit={handleSendMessage} className="flex gap-2 border-t border-line p-3">
+              <input
+                type="text"
+                placeholder="Type a message to your team…"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                disabled={sendingMsg}
+                className="flex-1 border border-line bg-raised px-3 py-2 font-mono text-[12px] text-fg placeholder:text-fg3 outline-none focus:border-accent"
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim() || sendingMsg}
+                className="flex items-center gap-1.5 border border-accent bg-accent px-4 py-2 font-mono text-[11px] font-medium uppercase tracking-wider text-canvas hover:bg-accent/90 disabled:opacity-50"
+              >
+                {sendingMsg ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                Send
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

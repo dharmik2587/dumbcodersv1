@@ -164,15 +164,48 @@ export const useApiStore = create<State>()(
       leaderboardLoading: false,
       toasts: [],
 
+      // Helper to build initial Builder from Supabase user
+      _mapAuthUserToBuilder: (u: any): Builder => {
+        const meta = u.user_metadata || {};
+        const name = meta.full_name || meta.name || u.email?.split('@')[0] || 'Builder';
+        const initials = name.split(' ').filter(Boolean).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() || 'B';
+        return {
+          id: u.id,
+          name,
+          handle: meta.user_name || meta.preferred_username || u.email?.split('@')[0] || 'builder',
+          avatar: meta.avatar_url || meta.picture || '',
+          avatarUrl: meta.avatar_url || meta.picture || '',
+          initials,
+          college: meta.college || 'Engineering College',
+          year: 3,
+          branch: 'Computer Science',
+          city: 'India',
+          role: 'frontend',
+          secondary: ['backend'],
+          goal: 'win',
+          bio: '',
+          skills: [],
+          repos: [],
+          projects: [],
+          events: [],
+          availability: [],
+          weeklyHours: 15,
+          openToTeams: true,
+          verified: true,
+          lastActive: new Date().toISOString(),
+        };
+      },
+
       // Initialize auth on app load
       initializeAuth: async () => {
         try {
           const authState = await auth.getCurrentAuthState();
           if (authState.user) {
+            const initialBuilder = (get() as any)._mapAuthUserToBuilder(authState.user);
             set({
               isAuthenticated: true,
               isLoading: false,
-              me: authState.user as Builder,
+              me: get().me && get().me?.name !== 'Demo Builder' ? get().me : initialBuilder,
             });
             try {
               await get().loadUser();
@@ -182,11 +215,11 @@ export const useApiStore = create<State>()(
               // Data loading errors shouldn't block auth init
             }
           } else {
-            set({ isAuthenticated: false, isLoading: false });
+            set({ isAuthenticated: false, isLoading: false, me: null });
           }
         } catch (error) {
           console.error('Auth initialization error:', error);
-          set({ isAuthenticated: false, isLoading: false });
+          set({ isAuthenticated: false, isLoading: false, me: null });
         }
       },
 
@@ -198,7 +231,7 @@ export const useApiStore = create<State>()(
           if (authState.user) {
             set({
               isAuthenticated: true,
-              me: authState.user as Builder,
+              me: (get() as any)._mapAuthUserToBuilder(authState.user),
             });
             await get().loadUser();
             await get().loadTeams();
@@ -227,7 +260,7 @@ export const useApiStore = create<State>()(
           if (authState.user) {
             set({
               isAuthenticated: true,
-              me: authState.user as Builder,
+              me: (get() as any)._mapAuthUserToBuilder(authState.user),
             });
             await get().loadUser();
             await get().loadTeams();

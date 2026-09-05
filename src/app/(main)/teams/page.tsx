@@ -160,6 +160,32 @@ function TeamsIndex() {
                     <CoverageHead coverage={cov} />
                   </div>
 
+                  {/* Team Members Roster */}
+                  <div className="mt-4 border-t border-line/60 pt-3">
+                    <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-fg3">Roster ({(t.members ?? []).length}/{t.maxMembers ?? 4}):</span>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {(t.members ?? []).map((m: any, mIdx: number) => {
+                        const memberBuilder = byId.get(m.builderId);
+                        const displayName = m.name || memberBuilder?.name || (m.username ? `@${m.username}` : `Member ${mIdx + 1}`);
+                        const isLeader = m.builderId === t.leaderId || m.role === 'leader';
+                        return (
+                          <div
+                            key={m.builderId || mIdx}
+                            className="flex items-center gap-1.5 border border-line bg-raised/80 px-2 py-1 font-mono text-[10px] text-fg"
+                          >
+                            <span className="flex h-4 w-4 items-center justify-center rounded-full bg-accent-soft text-[8px] font-bold text-accent">
+                              {displayName.slice(0, 1).toUpperCase()}
+                            </span>
+                            <span className="truncate max-w-[120px]">{displayName}</span>
+                            {isLeader && (
+                              <span className="text-[8px] uppercase tracking-wider text-accent">★</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     {(t.rolesNeeded ?? []).map((role: string) => (
                       <Chip key={role} tone="amber">{ROLE_LABEL[role as RoleKey] ?? role} open</Chip>

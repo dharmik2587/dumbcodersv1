@@ -22,12 +22,58 @@ export async function isTeamMember(teamId: string, userId: string) {
 
 export async function listMyTeams(userId: string) {
   const db = getCoreDb();
-  return db
+  // Find all teams the user belongs to
+  const userTeamRows = await db
     .select({ team: teams, membership: teamMembers })
     .from(teamMembers)
     .innerJoin(teams, eq(teamMembers.teamId, teams.id))
     .where(eq(teamMembers.userId, userId))
     .orderBy(teams.updatedAt);
+
+  if (!userTeamRows.length) return [];
+
+  // For each team, fetch ALL members with their profile details
+  const teamIds = userTeamRows.map((r) => r.team.id);
+  const allMembers = await db
+    .select({
+      teamId: teamMembers.teamId,
+      userId: teamMembers.userId,
+      role: teamMembers.role,
+      joinedAt: teamMembers.joinedAt,
+      profile: {
+        id: profiles.id,
+        fullName: profiles.fullName,
+        username: profiles.username,
+        avatarUrl: profiles.avatarUrl,
+        studentCode: profiles.studentCode,
+        rolePreference: profiles.rolePreference,
+      },
+    })
+    .from(teamMembers)
+    .innerJoin(profiles, eq(teamMembers.userId, profiles.id));
+
+  const membersByTeam = new Map<string, any[]>();
+  allMembers.forEach((m) => {
+    const list = membersByTeam.get(m.teamId) || [];
+    list.push({
+      builderId: m.userId,
+      role: (m.role === 'leader' ? 'backend' : (m.role || 'backend')) as string,
+      joinedAt: m.joinedAt?.toISOString?.() || new Date().toISOString(),
+      name: m.profile?.fullName || m.profile?.username || 'Teammate',
+      username: m.profile?.username,
+      avatarUrl: m.profile?.avatarUrl,
+      studentCode: m.profile?.studentCode,
+    });
+    membersByTeam.set(m.teamId, list);
+  });
+
+  return userTeamRows.map((row) => ({
+    team: {
+      ...row.team,
+      members: membersByTeam.get(row.team.id) || [],
+    },
+    membership: row.membership,
+  }));
 }
 
 export async function createTeamMessage(teamId: string, userId: string, content: string) {

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter, usePathname, useSearchParams } from "next/navigation";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Check, ChevronDown, Loader2, Send, Sparkles, UserPlus } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Loader2, Send, Sparkles, UserPlus, Search, X } from "lucide-react";
 import { byIdMap, useActiveTeam, useMe, useApiStore } from "@/client/store/apiStore";
 import { ROLE_LABEL, ROLES, type RoleKey } from "@/client/types";
 import { CLUSTER_NAME, CLUSTER_ORDER } from "@/client/data/seed";
@@ -66,6 +66,7 @@ export default function Match() {
   const hackathonId = params.get("hackathon") ?? team?.hackathonId ?? "";
   const role = (params.get("role") ?? "all") as RoleKey | "all";
   const minScore = Number(params.get("min") ?? 0);
+  const [searchQuery, setSearchQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [composing, setComposing] = useState<ScoredCandidate | null>(null);
 
@@ -73,8 +74,19 @@ export default function Match() {
 
   const ranked = useMemo(() => {
     if (!team) return [];
+    let pool = builders.filter((b) => b.openToTeams);
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      pool = pool.filter(
+        (b) =>
+          b.name.toLowerCase().includes(q) ||
+          (b.studentCode && b.studentCode.toLowerCase().includes(q)) ||
+          b.handle.toLowerCase().includes(q) ||
+          b.id.toLowerCase().includes(q)
+      );
+    }
     return rankCandidates(
-      builders.filter((b) => b.openToTeams),
+      pool,
       me,
       team,
       byId,
@@ -84,8 +96,8 @@ export default function Match() {
         role: role === "all" ? undefined : role,
         exclude: team.members.map((m) => m.builderId),
       },
-    ).slice(0, 14);
-  }, [builders, me, team, byId, hackathon, minScore, role]);
+    ).slice(0, 20);
+  }, [builders, me, team, byId, hackathon, minScore, role, searchQuery]);
 
   const coverage = team ? teamCoverage(team, byId, hackathon) : null;
   const active = ranked.find((r) => r.builder.id === expanded) ?? ranked[0];
@@ -151,7 +163,23 @@ export default function Match() {
       />
 
       {/* controls */}
-      <div className="mt-6 flex flex-wrap items-center gap-2 border-b border-line pb-4">
+      <div className="mt-6 flex flex-wrap items-center gap-3 border-b border-line pb-4">
+        <div className="flex flex-1 sm:max-w-xs items-center gap-2 border border-line bg-raised px-2.5 py-1.5 focus-within:border-accent">
+          <Search size={13} className="text-fg3" />
+          <input
+            type="text"
+            placeholder="Search student ID, code, name…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-transparent font-mono text-[11px] text-fg placeholder:text-fg3 focus:outline-none"
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} className="text-fg3 hover:text-fg">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
         <div className="flex gap-px border border-line bg-raised p-px">
           <button
             onClick={() => {
