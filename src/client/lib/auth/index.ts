@@ -7,13 +7,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn('Supabase credentials not found in environment variables');
 }
 
-export const supabase = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  cookieOptions: {
-    name: 'sb',
-    sameSite: 'lax',
-    secure: typeof window !== 'undefined' && window.location.protocol === 'https:',
-  },
-});
+export const supabase = createBrowserClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export interface AuthState {
   user: {

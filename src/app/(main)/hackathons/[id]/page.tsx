@@ -209,7 +209,7 @@ export default function HackathonDetail() {
                 />
                 <p className="mt-4 text-[12.5px] leading-relaxed text-fg2">
                   Amber bars are the roles this track leans on hardest. Matching weights your
-                  team's gaps against exactly these, so a 94% complement here means something.
+                  team&apos;s gaps against exactly these, so a 94% complement here means something.
                 </p>
               </div>
             </Panel>

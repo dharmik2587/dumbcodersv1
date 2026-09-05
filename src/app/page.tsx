@@ -208,7 +208,7 @@ function Hero({ user }: { user: any }) {
             <Reveal delay={160}>
               <p className="mt-8 max-w-xl text-[16px] leading-[1.7] text-fg2">
                 HackMate reads what your team can actually ship — the roles you hold, the hours
-                you're free, the stack you argue about least — then introduces the few people who
+                you&apos;re free, the stack you argue about least — then introduces the few people who
                 close the gap. No cold DMs into random group chats.
               </p>
             </Reveal>
@@ -392,7 +392,7 @@ function PlatformStrip({ hackathons }: { hackathons: any[] }) {
               </h2>
               <p className="mt-5 max-w-sm text-[14px] leading-relaxed text-fg2">
                 Every module writes back into the same graph. Bookmark an event and it feeds
-                matching; accept a request and your team's coverage updates in place.
+                matching; accept a request and your team&apos;s coverage updates in place.
               </p>
               <Link href="/discover">
                 <Button variant="outline" size="sm" className="mt-7">
@@ -467,7 +467,7 @@ function Problem() {
                 </p>
                 <p className="text-[15px] leading-[1.75] text-fg2">
                   The result is a team that looks complete on the registration form and behaves
-                  like two people and an audience for thirty-six hours. The gap isn't talent. It's
+                  like two people and an audience for thirty-six hours. The gap isn&apos;t talent. It&apos;s
                   that nobody could see the shape of the team until it was too late to change it.
                 </p>
               </div>
@@ -476,7 +476,7 @@ function Problem() {
             <Reveal delay={150}>
               <figure className="my-14 border-y border-line py-10">
                 <blockquote className="display text-[clamp(1.5rem,3vw,2.3rem)] font-medium leading-[1.15] text-fg">
-                  “We didn't lose because the idea was weak. We lost because nobody on the team
+                  “We didn&apos;t lose because the idea was weak. We lost because nobody on the team
                   could build the thing we pitched.”
                   <span className="ml-2 inline-block h-px w-16 translate-y-[-0.35em] bg-mint" />
                 </blockquote>
@@ -548,7 +548,7 @@ function Matching() {
                 Compatibility is a calculation, not a first impression.
               </h2>
               <p className="mt-6 max-w-md text-[15px] leading-[1.7] text-fg2">
-                Five signals, weighted, scored against the specific event you're entering. The
+                Five signals, weighted, scored against the specific event you&apos;re entering. The
                 output is a number both people can interrogate — every point traceable to a signal
                 you can disagree with.
               </p>
@@ -1012,7 +1012,7 @@ function Builder() {
             <Reveal delay={140}>
               <div className="mt-10 max-w-lg space-y-5 text-[15px] leading-[1.75] text-fg2">
                 <p>
-                  The thing students describe months later isn't the result. It's that one weekend
+                  The thing students describe months later isn&apos;t the result. It&apos;s that one weekend
                   where the work compounded — where the model landed at 3 a.m. and the interface
                   was already waiting for it.
                 </p>
@@ -1160,7 +1160,7 @@ function FinalCTA() {
               <span className="text-fg2">Find the people who fit it.</span>
             </h2>
             <p className="mx-auto mt-7 max-w-md text-[15px] leading-[1.7] text-fg2">
-              Build a profile in about six minutes. We'll show you the events that fit your term
+              Build a profile in about six minutes. We&apos;ll show you the events that fit your term
               and the builders who close your gaps.
             </p>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">

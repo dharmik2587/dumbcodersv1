@@ -255,7 +255,7 @@ function RequestCard({
       </div>
 
       {message && (
-        <p className="mt-4 flex-1 text-[13px] leading-[1.65] text-fg2">"{message}"</p>
+        <p className="mt-4 flex-1 text-[13px] leading-[1.65] text-fg2">&quot;{message}&quot;</p>
       )}
 
       <div className="mt-4 flex flex-wrap gap-1.5">

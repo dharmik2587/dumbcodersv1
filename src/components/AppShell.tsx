@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -172,6 +172,7 @@ function Notifications() {
 /* ------------------------------------------------------------------ */
 function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [q, setQ] = useState("");
+  const deferredQ = useDeferredValue(q);
   const [idx, setIdx] = useState(0);
   const router = useRouter();
   const hackathons = useApiStore((s) => s.hackathons);
@@ -187,7 +188,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
   const inputRef = useRef<HTMLInputElement>(null);
 
   const items = useMemo(() => {
-    const term = q.trim().toLowerCase();
+    const term = deferredQ.trim().toLowerCase();
     const routes = [
       { label: "Discover hackathons", group: "Navigate", href: "/discover" },
       { label: "Find teammates", group: "Navigate", href: "/match" },
@@ -230,7 +231,7 @@ function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void 
             i.href.toLowerCase().includes(term),
         )
       : all.slice(0, 8);
-  }, [q, hackathons, builders, teams]);
+  }, [deferredQ, hackathons, builders, teams]);
 
   useEffect(() => setIdx(0), [q]);
   useEffect(() => {
@@ -395,6 +396,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const setActiveTeam = useApiStore((s) => s.setActiveTeam);
   const requests = useStore((s) => s.requests); // Keep seed data for now
   const signOut = useApiStore((s) => s.signOut);
+  const isAuthenticated = useApiStore((s) => s.isAuthenticated);
   const toggle = useTheme().toggle;
   const unread = requests.filter((r) => r.state === "new" && r.toId !== me.id).length;
   const team = teams.find((t) => t.id === activeTeamId) ?? teams[0];
@@ -719,15 +721,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </IconButton>
               </div>
               <ul className="mt-6 space-y-1">
-                {[...NAV, { to: "/sign-in", label: "Sign in", icon: LogOut, key: "" }].map((n) => (
-                  <li key={n.to}>
-                    <Link
-                      href={n.to}
-                      className="flex items-center gap-3 px-2 py-2.5 text-[13.5px] text-fg2 transition-colors hover:text-fg"
-                    >
-                      <n.icon size={15} />
-                      {n.label}
-                    </Link>
+                {([...NAV, isAuthenticated ? { to: "#", label: "Sign out", icon: LogOut, key: "", action: () => { signOut(); router.push("/sign-in"); } } : { to: "/sign-in", label: "Sign in", icon: LogOut, key: "" }] as any[]).map((n) => (
+                  <li key={n.label}>
+                    {n.action ? (
+                      <button onClick={n.action} className="flex w-full items-center gap-3 px-2 py-2.5 text-[13.5px] text-fg2 transition-colors hover:text-fg text-left">
+                        <n.icon size={15} />
+                        {n.label}
+                      </button>
+                    ) : (
+                      <Link
+                        href={n.to}
+                        className="flex items-center gap-3 px-2 py-2.5 text-[13.5px] text-fg2 transition-colors hover:text-fg"
+                      >
+                        <n.icon size={15} />
+                        {n.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>

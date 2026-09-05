@@ -164,7 +164,7 @@ function SignInContent() {
           
           <div className="border-t border-line bg-raised px-8 py-5 text-center">
             <p className="text-[13px] text-fg2">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <Link href="/sign-up" className="text-accent hover:text-accent-ink transition-colors font-medium">
                 Create profile
               </Link>
