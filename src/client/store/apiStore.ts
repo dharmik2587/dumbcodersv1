@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import * as api from '../lib/api';
 import * as auth from '../lib/auth';
+import * as requestsApi from '../lib/api/requests';
 import type { Builder, Hackathon, Team, Notification, CollabRequest, Project } from '../types';
 
 export type Toast = {
@@ -12,54 +13,74 @@ export type Toast = {
   undo?: () => void;
 };
 
+import { CLUSTERS } from '../data/seed';
+
 export function mapProfileToBuilder(profile: any): Builder {
   if (!profile) return null as any;
-  const name = profile.fullName || profile.username || 'Anonymous';
-  const initials = name.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
+  const name = profile.fullName || profile.username || 'Builder';
+  const initials = name.split(' ').filter(Boolean).map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'B';
+  
+  // Map skills to taxonomy clusters
+  const rawSkills: string[] = Array.isArray(profile.skills) ? profile.skills : [];
+  const skills = rawSkills.map((s: string) => {
+    const meta = CLUSTERS.find(
+      (c) => c.label.toLowerCase() === s.toLowerCase() || c.label.toLowerCase().replace(/[^a-z]+/g, '-') === s.toLowerCase()
+    );
+    return {
+      id: meta ? meta.label.toLowerCase().replace(/[^a-z]+/g, '-') : s.toLowerCase().replace(/[^a-z]+/g, '-'),
+      label: meta ? meta.label : s,
+      cluster: meta ? meta.cluster : 'interface',
+      level: 3 as const,
+      verified: true,
+    };
+  });
+
+  // Map availability
+  let availability = [
+    { day: 0, start: 18, end: 22 },
+    { day: 2, start: 18, end: 22 },
+    { day: 5, start: 14, end: 22 },
+    { day: 6, start: 14, end: 22 },
+  ];
+  if (profile.availability) {
+    try {
+      const parsed = typeof profile.availability === 'string' ? JSON.parse(profile.availability) : profile.availability;
+      if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0].day === 'number') {
+        availability = parsed;
+      }
+    } catch {
+      // Keep default
+    }
+  }
+
+  const weeklyHours = availability.reduce((acc, slot) => acc + (slot.end - slot.start), 0) || 16;
+
   return {
     id: profile.id,
     studentCode: profile.studentCode,
     handle: profile.username || '',
     name,
     initials,
-    college: profile.college?.shortName || profile.college?.name || 'Unknown',
-    year: profile.graduationYear ? (profile.graduationYear - 2026 + 1) : 1, // hacky conversion
-    branch: profile.branch || '',
-    city: 'Global',
+    college: profile.college?.shortName || profile.college?.name || profile.college || 'Engineering College',
+    year: profile.graduationYear ? (profile.graduationYear - 2026 + 1) : 3,
+    branch: profile.branch || 'Computer Science',
+    city: profile.city || 'Campus',
     role: (profile.rolePreference || 'frontend') as any,
     secondary: [],
     avatarUrl: profile.avatarUrl,
     goal: 'win',
     bio: profile.bio || '',
-    skills: (profile.skills || []).map((s: string) => ({ id: s, label: s, cluster: 'interface', level: 2 })),
+    skills,
     repos: profile.github?.topRepos || [],
     projects: [],
     events: [],
-    availability: profile.availability ? [{ day: 6, start: 9, end: 17 }] : [],
-    weeklyHours: 10,
-    openToTeams: !!profile.isOpenToTeam,
+    availability,
+    weeklyHours,
+    openToTeams: profile.isOpenToTeam !== false,
     verified: true,
     lastActive: profile.updatedAt || new Date().toISOString(),
   };
 }
-
-export type ConversationWithMessages = {
-  conversationId: string;
-  other: {
-    id: string;
-    fullName: string;
-    username: string;
-    avatarUrl?: string;
-    studentCode?: string;
-  };
-  messages: Array<{
-    id: string;
-    senderId: string;
-    content: string;
-    readAt?: string;
-    createdAt: string;
-  }>;
-};
 
 export type LeaderboardEntry = {
   rank: number;
@@ -86,11 +107,10 @@ type State = {
   teams: Team[];
   builders: Builder[];
   projects: Project[];
-  requests: CollabRequest[];
+  requests: any[];
   notifications: Notification[];
   bookmarks: string[];
   activeTeamId: string | null;
-  conversations: ConversationWithMessages[];
   leaderboard: LeaderboardEntry[];
   leaderboardLoading: boolean;
 
@@ -109,18 +129,16 @@ type State = {
   loadTeams: () => Promise<void>;
   loadBuilders: (params?: any) => Promise<void>;
   loadUser: () => Promise<void>;
-  loadConversations: () => Promise<void>;
-  loadConversationMessages: (conversationId: string) => Promise<void>;
-  sendConversationMessage: (conversationId: string, content: string) => Promise<void>;
-  startConversation: (toUserId: string) => Promise<string | null>;
+  loadRequests: (direction?: 'sent' | 'received' | 'all') => Promise<void>;
   loadLeaderboard: (params?: { scope?: 'global' | 'college' | 'batch'; window?: 'week' | 'month' | 'all' }) => Promise<void>;
   submitPlatformUsername: (platform: 'leetcode' | 'github', username: string) => Promise<boolean>;
   createTeam: (data: any) => Promise<string | null>;
   setActiveTeam: (id: string | null) => void;
   toggleBookmark: (id: string) => Promise<void>;
-  sendRequest: (r: Omit<CollabRequest, 'id' | 'createdAt' | 'state'>) => void;
-  acceptRequest: (id: string) => void;
-  setRequestState: (id: string, state: CollabRequest['state']) => void;
+  sendRequest: (data: { toUserId: string; teamId?: string | null; hackathonId?: string | null; message?: string; roleOffered?: string }) => Promise<void>;
+  acceptRequest: (id: string) => Promise<void>;
+  rejectRequest: (id: string) => Promise<void>;
+  withdrawRequest: (id: string) => Promise<void>;
   pushToast: (t: Omit<Toast, 'id'>) => void;
   dismissToast: (id: number) => void;
 };
@@ -142,7 +160,6 @@ export const useApiStore = create<State>()(
       notifications: [],
       bookmarks: [],
       activeTeamId: null,
-      conversations: [],
       leaderboard: [],
       leaderboardLoading: false,
       toasts: [],
@@ -160,7 +177,7 @@ export const useApiStore = create<State>()(
             try {
               await get().loadUser();
               await get().loadTeams();
-              await get().loadConversations();
+              await get().loadRequests();
             } catch (e) {
               // Data loading errors shouldn't block auth init
             }
@@ -183,6 +200,8 @@ export const useApiStore = create<State>()(
               isAuthenticated: true,
               me: authState.user as Builder,
             });
+            await get().loadUser();
+            await get().loadTeams();
             get().pushToast({
               label: 'Success',
               body: 'Account created successfully',
@@ -212,7 +231,7 @@ export const useApiStore = create<State>()(
             });
             await get().loadUser();
             await get().loadTeams();
-            await get().loadConversations();
+            await get().loadRequests();
             get().pushToast({
               label: 'Success',
               body: 'Signed in successfully',
@@ -262,7 +281,6 @@ export const useApiStore = create<State>()(
             requests: [],
             bookmarks: [],
             activeTeamId: null,
-            conversations: [],
             leaderboard: [],
           });
           get().pushToast({
@@ -323,21 +341,44 @@ export const useApiStore = create<State>()(
       },
 
 
-      // Load teams
+      // Load teams — maps real { team, membership }[] DB shape to client Team type
       loadTeams: async () => {
         try {
           const rawTeams = await api.listMyTeams();
-          const mappedTeams = (rawTeams || []).map((t: any) => ({
-            id: t.id,
-            name: t.name,
-            hackathonId: t.hackathonId,
-            ownerId: t.ownerId || t.leaderId,
-            members: t.members || [],
-            openSlots: t.openSlots || (t.rolesNeeded || []).map((role: any) => ({ role, note: '' })),
-            project: t.project || t.projectName,
-            visibility: t.visibility || (t.isOpen ? 'discoverable' : 'private'),
-            ...t
-          }));
+          // rawTeams is an array of { team, membership } from the DB
+          const mappedTeams = (rawTeams || []).map((row: any) => {
+            const t = row.team ?? row;
+            const membership = row.membership;
+            return {
+              id: t.id,
+              name: t.name,
+              description: t.description,
+              hackathonId: t.hackathonId,
+              leaderId: t.leaderId,
+              ownerId: t.leaderId,
+              maxMembers: t.maxMembers ?? 4,
+              rolesNeeded: t.rolesNeeded ?? [],
+              isOpen: t.isOpen ?? true,
+              status: t.status ?? 'forming',
+              projectName: t.projectName,
+              projectUrl: t.projectUrl,
+              demoUrl: t.demoUrl,
+              createdAt: t.createdAt,
+              updatedAt: t.updatedAt,
+              members: (t.members && t.members.length > 0)
+                ? t.members
+                : (membership?.userId || t.leaderId ? [{
+                    builderId: membership?.userId || t.leaderId,
+                    role: (membership?.role === 'leader' ? 'backend' : (membership?.role || 'backend')) as any,
+                    joinedAt: membership?.joinedAt || t.createdAt || new Date().toISOString(),
+                  }] : []),
+              openSlots: (t.rolesNeeded ?? []).map((role: string) => ({ role, note: '' })),
+              visibility: t.isOpen ? 'discoverable' : 'private',
+              project: t.projectName ?? null,
+              hackathonCode: '',
+              myRole: membership?.role ?? 'member',
+            };
+          });
           set({ teams: mappedTeams as any[] });
           if (mappedTeams.length > 0 && !get().activeTeamId) {
             set({ activeTeamId: mappedTeams[0].id });
@@ -367,54 +408,6 @@ export const useApiStore = create<State>()(
         }
       },
 
-      // Load conversations
-      loadConversations: async () => {
-        try {
-          const convs = await api.listConversations();
-          set({
-            conversations: convs.map((c: any) => ({ ...c, messages: [] })),
-          });
-        } catch (error) {
-          console.error('Failed to load conversations:', error);
-        }
-      },
-
-      // Load conversation messages
-      loadConversationMessages: async (conversationId: string) => {
-        try {
-          const messages = await api.getConversationMessages(conversationId);
-          set((s) => ({
-            conversations: s.conversations.map((c) =>
-              c.conversationId === conversationId ? { ...c, messages } : c
-            ),
-          }));
-        } catch (error) {
-          console.error('Failed to load messages:', error);
-        }
-      },
-
-      // Send conversation message
-      sendConversationMessage: async (conversationId: string, content: string) => {
-        try {
-          await api.sendMessage(conversationId, content);
-          await get().loadConversationMessages(conversationId);
-        } catch (error) {
-          console.error('Failed to send message:', error);
-          get().pushToast({ label: 'Error', body: 'Failed to send message', tone: 'bad' });
-        }
-      },
-
-      // Start new conversation
-      startConversation: async (toUserId: string) => {
-        try {
-          const result = await api.startConversation(toUserId);
-          await get().loadConversations();
-          return result.conversationId;
-        } catch (error) {
-          console.error('Failed to start conversation:', error);
-          return null;
-        }
-      },
 
       // Load leaderboard
       loadLeaderboard: async (params) => {
@@ -447,10 +440,18 @@ export const useApiStore = create<State>()(
         }
       },
 
-      // Create team
+      // Create team — sends only fields the API schema accepts
       createTeam: async (data) => {
         try {
-          const team = await api.createTeam(data);
+          const payload: api.CreateTeamData = {
+            name: data.name,
+          };
+          if (data.hackathonId) payload.hackathonId = data.hackathonId;
+          if (data.description) payload.description = data.description;
+          if (data.maxMembers) payload.maxMembers = data.maxMembers;
+          if (data.rolesNeeded) payload.rolesNeeded = data.rolesNeeded;
+          if (typeof data.isOpen === 'boolean') payload.isOpen = data.isOpen;
+          const team = await api.createTeam(payload);
           await get().loadTeams();
           set({ activeTeamId: team.id });
           get().pushToast({ label: 'Success', body: `Team "${team.name}" created`, tone: 'good' });
@@ -459,6 +460,66 @@ export const useApiStore = create<State>()(
           console.error('Failed to create team:', error);
           get().pushToast({ label: 'Error', body: 'Failed to create team', tone: 'bad' });
           return null;
+        }
+      },
+
+      // Load requests from the real DB
+      loadRequests: async (direction = 'all') => {
+        try {
+          const data = await requestsApi.listRequests(direction);
+          set({ requests: data || [] });
+        } catch (error) {
+          console.error('Failed to load requests:', error);
+        }
+      },
+
+      // Send a collaboration request via real API
+      sendRequest: async (data) => {
+        try {
+          await requestsApi.sendCollabRequest(data);
+          await get().loadRequests();
+          get().pushToast({ label: 'Request sent', body: 'Your collaboration request was delivered.', tone: 'good' });
+        } catch (error: any) {
+          console.error('Failed to send request:', error);
+          get().pushToast({ label: 'Error', body: error?.message || 'Could not send request.', tone: 'bad' });
+          throw error;
+        }
+      },
+
+      // Accept a request via real API
+      acceptRequest: async (id) => {
+        try {
+          await requestsApi.acceptRequest(id);
+          await get().loadRequests();
+          await get().loadTeams();
+          get().pushToast({ label: 'Accepted', body: 'They have been added to the team.', tone: 'good' });
+        } catch (error: any) {
+          console.error('Failed to accept request:', error);
+          get().pushToast({ label: 'Error', body: error?.message || 'Could not accept request.', tone: 'bad' });
+        }
+      },
+
+      // Reject a request via real API
+      rejectRequest: async (id) => {
+        try {
+          await requestsApi.rejectRequest(id);
+          await get().loadRequests();
+          get().pushToast({ label: 'Declined', body: 'Request declined.', tone: 'info' });
+        } catch (error: any) {
+          console.error('Failed to reject request:', error);
+          get().pushToast({ label: 'Error', body: error?.message || 'Could not decline request.', tone: 'bad' });
+        }
+      },
+
+      // Withdraw a sent request via real API
+      withdrawRequest: async (id) => {
+        try {
+          await requestsApi.withdrawRequest(id);
+          await get().loadRequests();
+          get().pushToast({ label: 'Withdrawn', body: 'Your request has been withdrawn.', tone: 'info' });
+        } catch (error: any) {
+          console.error('Failed to withdraw request:', error);
+          get().pushToast({ label: 'Error', body: error?.message || 'Could not withdraw request.', tone: 'bad' });
         }
       },
 
@@ -479,36 +540,6 @@ export const useApiStore = create<State>()(
         }
       },
 
-      // Send collaboration request (local optimistic update)
-      sendRequest: (r) => {
-        set((s) => ({
-          requests: [
-            {
-              ...r,
-              id: `REQ-${2300 + s.requests.length}`,
-              state: 'new',
-              createdAt: new Date().toISOString(),
-            },
-            ...s.requests,
-          ],
-        }));
-      },
-
-      // Set request state
-      setRequestState: (id, state) =>
-        set((s) => ({
-          requests: s.requests.map((r) => (r.id === id ? { ...r, state } : r)),
-        })),
-
-      // Accept request
-      acceptRequest: (id) => {
-        const req = get().requests.find((r) => r.id === id);
-        if (!req) return;
-        set((s) => ({
-          requests: s.requests.map((r) => (r.id === id ? { ...r, state: 'accepted' } : r)),
-        }));
-      },
-
       // Toast actions
       pushToast: (t) => {
         const id = toastSeq++;
@@ -520,9 +551,9 @@ export const useApiStore = create<State>()(
         set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
     }),
     {
-      name: 'hackmate.api.state.v1',
+      name: 'hackmate.api.state.v2',
       partialize: (s) => {
-        const { toasts, hackathons, builders, conversations, leaderboard, ...rest } = s;
+        const { toasts, hackathons, builders, leaderboard, ...rest } = s;
         return {
           ...rest,
           teams: s.teams,

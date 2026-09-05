@@ -25,17 +25,54 @@ import {
 } from "@/components/ui";
 import { cn } from "@/client/utils/cn";
 
+import { connectLeetcode, verifyLeetcode, getLeetcodeStatus, disconnectLeetcode } from "@/client/lib/api/leetcode";
+
 /* ------------------------------------------------------------------ */
 /* Link Account Form                                                    */
 /* ------------------------------------------------------------------ */
 function LinkAccountPanel() {
   const submitPlatformUsername = useApiStore((s) => s.submitPlatformUsername);
+  const pushToast = useApiStore((s) => s.pushToast);
+  const loadLeaderboard = useApiStore((s) => s.loadLeaderboard);
+  
   const [githubInput, setGithubInput] = useState("");
   const [leetcodeInput, setLeetcodeInput] = useState("");
   const [githubLoading, setGithubLoading] = useState(false);
   const [leetcodeLoading, setLeetcodeLoading] = useState(false);
   const [githubLinked, setGithubLinked] = useState(false);
   const [leetcodeLinked, setLeetcodeLinked] = useState(false);
+  const [verifiedUsername, setVerifiedUsername] = useState<string | null>(null);
+
+  // LeetCode verification dialog state
+  const [verificationModal, setVerificationModal] = useState<{
+    open: boolean;
+    username: string;
+    code: string;
+    expiresAt: string;
+  }>({ open: false, username: "", code: "", expiresAt: "" });
+  const [verifying, setVerifying] = useState(false);
+
+  // Check initial LeetCode status
+  useEffect(() => {
+    getLeetcodeStatus()
+      .then((res) => {
+        if (res.connected && res.verified && res.username) {
+          setLeetcodeLinked(true);
+          setVerifiedUsername(res.username);
+          setLeetcodeInput(res.username);
+        } else if (res.verification_code && res.username) {
+          // Restore pending verification state if user reloaded or navigated back
+          setVerificationModal({
+            open: true,
+            username: res.username,
+            code: res.verification_code,
+            expiresAt: res.expires_at || "",
+          });
+          setLeetcodeInput(res.username);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const handleGithubSubmit = useCallback(async () => {
     if (!githubInput.trim() || githubLoading) return;
@@ -47,15 +84,80 @@ function LinkAccountPanel() {
     }
   }, [githubInput, githubLoading, submitPlatformUsername]);
 
-  const handleLeetcodeSubmit = useCallback(async () => {
+  const handleStartLeetcodeVerification = useCallback(async () => {
     if (!leetcodeInput.trim() || leetcodeLoading) return;
     setLeetcodeLoading(true);
-    const ok = await submitPlatformUsername("leetcode", leetcodeInput.trim());
-    setLeetcodeLoading(false);
-    if (ok) {
-      setLeetcodeLinked(true);
+    try {
+      const res = await connectLeetcode(leetcodeInput.trim());
+      setVerificationModal({
+        open: true,
+        username: res.username,
+        code: res.verification_code,
+        expiresAt: res.expires_at,
+      });
+      pushToast({
+        label: "Verification Code Generated",
+        body: `Add "${res.verification_code}" to your LeetCode profile about section.`,
+        tone: "info",
+      });
+    } catch (err: any) {
+      pushToast({
+        label: "Connection Failed",
+        body: err.message || "Could not generate verification code.",
+        tone: "bad",
+      });
+    } finally {
+      setLeetcodeLoading(false);
     }
-  }, [leetcodeInput, leetcodeLoading, submitPlatformUsername]);
+  }, [leetcodeInput, leetcodeLoading, pushToast]);
+
+  const handleConfirmVerification = useCallback(async () => {
+    if (!verificationModal.username || verifying) return;
+    setVerifying(true);
+    try {
+      const res = await verifyLeetcode(verificationModal.username);
+      if (res.verified) {
+        setLeetcodeLinked(true);
+        setVerifiedUsername(verificationModal.username);
+        setVerificationModal((prev) => ({ ...prev, open: false }));
+        pushToast({
+          label: "Verified Successfully",
+          body: `LeetCode account @${verificationModal.username} is now verified.`,
+          tone: "good",
+        });
+        await loadLeaderboard();
+      }
+    } catch (err: any) {
+      pushToast({
+        label: "Verification Failed",
+        body: err.message || "Could not find verification code on your LeetCode profile. Please ensure it is saved in your About Me section.",
+        tone: "bad",
+      });
+    } finally {
+      setVerifying(false);
+    }
+  }, [verificationModal.username, verifying, pushToast, loadLeaderboard]);
+
+  const handleDisconnectLeetcode = useCallback(async () => {
+    try {
+      await disconnectLeetcode();
+      setLeetcodeLinked(false);
+      setVerifiedUsername(null);
+      setLeetcodeInput("");
+      pushToast({
+        label: "Disconnected",
+        body: "LeetCode account unlinked.",
+        tone: "info",
+      });
+      await loadLeaderboard();
+    } catch (err: any) {
+      pushToast({
+        label: "Error",
+        body: err.message || "Failed to disconnect account.",
+        tone: "bad",
+      });
+    }
+  }, [pushToast, loadLeaderboard]);
 
   return (
     <Reveal className="lg:col-span-12">
@@ -63,7 +165,7 @@ function LinkAccountPanel() {
         <div className="flex items-center justify-between border-b border-line px-5 py-3">
           <Label tone="accent">link your accounts</Label>
           <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg3">
-            add profiles to compete
+            verified profiles compete on leaderboard
           </span>
         </div>
 
@@ -114,7 +216,7 @@ function LinkAccountPanel() {
                 ) : githubLinked ? (
                   <>✓ linked</>
                 ) : (
-                  <>verify</>
+                  <>link</>
                 )}
               </button>
             </div>
@@ -122,64 +224,187 @@ function LinkAccountPanel() {
 
           {/* LeetCode */}
           <div className="bg-surface px-5 py-5">
-            <div className="flex items-center gap-2.5 mb-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#FFA116]">
-                <Code2 size={16} className="text-black" />
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#FFA116]">
+                  <Code2 size={16} className="text-black" />
+                </div>
+                <div>
+                  <div className="text-[13.5px] text-fg">LeetCode</div>
+                  <div className="font-mono text-[10px] text-fg3">problems · rating · verification</div>
+                </div>
               </div>
-              <div>
-                <div className="text-[13.5px] text-fg">LeetCode</div>
-                <div className="font-mono text-[10px] text-fg3">problems · rating · contests</div>
+              {leetcodeLinked && (
+                <button
+                  onClick={handleDisconnectLeetcode}
+                  className="font-mono text-[10px] uppercase text-danger hover:underline"
+                >
+                  disconnect
+                </button>
+              )}
+            </div>
+
+            {leetcodeLinked ? (
+              <div className="flex items-center justify-between border border-mint/40 bg-mint/10 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2 w-2 rounded-full bg-mint" />
+                  <span className="font-mono text-[12px] text-mint">
+                    Verified as @{verifiedUsername}
+                  </span>
+                </div>
+                <span className="font-mono text-[9px] uppercase tracking-wider text-mint/80">
+                  Active
+                </span>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Enter LeetCode username"
-                value={leetcodeInput}
-                onChange={(e) => {
-                  setLeetcodeInput(e.target.value);
-                  setLeetcodeLinked(false);
-                }}
-                onKeyDown={(e) => e.key === "Enter" && handleLeetcodeSubmit()}
-                disabled={leetcodeLoading}
-                className={cn(
-                  "flex-1 border bg-raised px-3 py-2 font-mono text-[12px] text-fg placeholder:text-fg3/50 outline-none transition-colors",
-                  leetcodeLinked
-                    ? "border-mint/50 bg-mint/5"
-                    : "border-line focus:border-accent-line",
-                )}
-              />
-              <button
-                onClick={handleLeetcodeSubmit}
-                disabled={!leetcodeInput.trim() || leetcodeLoading}
-                className={cn(
-                  "flex h-[38px] items-center gap-1.5 border px-3 font-mono text-[10px] uppercase tracking-[0.12em] transition-all",
-                  leetcodeLinked
-                    ? "border-mint/40 bg-mint/10 text-mint"
-                    : leetcodeLoading
-                      ? "border-line bg-raised text-fg3 cursor-wait"
-                      : "border-accent-line bg-accent-soft text-accent hover:bg-accent/20 disabled:opacity-40 disabled:cursor-not-allowed",
-                )}
-              >
-                {leetcodeLoading ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : leetcodeLinked ? (
-                  <>✓ linked</>
-                ) : (
-                  <>verify</>
-                )}
-              </button>
-            </div>
+            ) : verificationModal.code ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between border border-accent-line/60 bg-accent-soft/30 px-3 py-2">
+                  <div>
+                    <div className="font-mono text-[11px] text-accent">
+                      Pending for @{verificationModal.username}
+                    </div>
+                    <div className="font-mono text-[10px] text-fg3">
+                      Code: <strong className="text-fg">{verificationModal.code}</strong>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setVerificationModal((prev) => ({ ...prev, open: true }))}
+                      className="border border-line bg-raised px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-fg hover:bg-hover"
+                    >
+                      View Instructions
+                    </button>
+                    <button
+                      onClick={handleConfirmVerification}
+                      disabled={verifying}
+                      className="flex items-center gap-1 border border-accent bg-accent px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-wider text-canvas hover:bg-accent/90 disabled:opacity-50"
+                    >
+                      {verifying ? <Loader2 size={11} className="animate-spin" /> : null}
+                      Check & Verify
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Enter LeetCode username"
+                  value={leetcodeInput}
+                  onChange={(e) => setLeetcodeInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleStartLeetcodeVerification()}
+                  disabled={leetcodeLoading}
+                  className="flex-1 border border-line bg-raised px-3 py-2 font-mono text-[12px] text-fg placeholder:text-fg3/50 outline-none transition-colors focus:border-accent-line"
+                />
+                <button
+                  onClick={handleStartLeetcodeVerification}
+                  disabled={!leetcodeInput.trim() || leetcodeLoading}
+                  className="flex h-[38px] items-center gap-1.5 border border-accent-line bg-accent-soft px-3 font-mono text-[10px] uppercase tracking-[0.12em] text-accent transition-all hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {leetcodeLoading ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <>Connect</>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         <div className="px-5 py-3">
           <p className="font-mono text-[10px] leading-relaxed text-fg3">
-            We fetch your public stats once from the platform API, verify the account exists, and compute your score.
-            Link either or both — your composite score reflects whichever platforms you&apos;ve connected.
+            To prevent impersonation, LeetCode accounts require ownership verification via a temporary code in your public profile.
           </p>
         </div>
       </Panel>
+
+      {/* Verification Code Modal */}
+      {verificationModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md border border-line-strong bg-surface p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <span className="flex h-2 w-2 rounded-full bg-accent" />
+                <h3 className="font-mono text-[13px] uppercase tracking-wider text-fg">
+                  Verify LeetCode Ownership
+                </h3>
+              </div>
+              <button
+                onClick={() => setVerificationModal((prev) => ({ ...prev, open: false }))}
+                className="font-mono text-[12px] text-fg3 hover:text-fg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <p className="text-[13px] leading-relaxed text-fg2">
+                To confirm you own <strong className="text-fg font-mono">@{verificationModal.username}</strong>, copy the code below and paste it into your public LeetCode profile (in the <strong>About Me</strong> or <strong>Name/Bio</strong> section):
+              </p>
+
+              <div className="flex items-center justify-between border border-accent/40 bg-accent-soft/40 p-3">
+                <span className="font-mono text-[18px] font-bold tracking-widest text-accent">
+                  {verificationModal.code}
+                </span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(verificationModal.code);
+                    pushToast({ label: "Copied", body: "Verification code copied to clipboard", tone: "info" });
+                  }}
+                  className="border border-accent/40 bg-accent-soft px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-accent transition-colors hover:bg-accent hover:text-canvas"
+                >
+                  Copy
+                </button>
+              </div>
+
+              <div className="rounded border border-line/70 bg-raised/40 p-3 font-mono text-[11px] text-fg3">
+                <div className="font-semibold text-fg2">Steps:</div>
+                <ol className="mt-1.5 list-decimal space-y-1.5 pl-4">
+                  <li>
+                    Open{" "}
+                    <a
+                      href={`https://leetcode.com/${encodeURIComponent(verificationModal.username)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-accent underline underline-offset-2 hover:text-accent-bright"
+                    >
+                      leetcode.com/{verificationModal.username}
+                    </a>{" "}
+                    (or your LeetCode Account settings)
+                  </li>
+                  <li>Paste <strong className="text-fg">{verificationModal.code}</strong> into your <strong>About Me</strong>, <strong>Name</strong>, or <strong>Website</strong> field and click <strong>Save</strong></li>
+                  <li>Click the <strong>&quot;Check & Verify&quot;</strong> button below</li>
+                </ol>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-line pt-4">
+                <button
+                  type="button"
+                  onClick={() => setVerificationModal((prev) => ({ ...prev, open: false }))}
+                  className="border border-line px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-fg3 transition-colors hover:bg-hover hover:text-fg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmVerification}
+                  disabled={verifying}
+                  className="flex items-center gap-1.5 border border-accent bg-accent px-4 py-2 font-mono text-[11px] font-medium uppercase tracking-wider text-canvas transition-colors hover:bg-accent/90 disabled:opacity-50"
+                >
+                  {verifying ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" /> Checking...
+                    </>
+                  ) : (
+                    <>Check & Verify</>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Reveal>
   );
 }

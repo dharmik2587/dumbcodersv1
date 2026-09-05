@@ -4,9 +4,9 @@ import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Inbox, Send, X } from "lucide-react";
+import { Send, X, Loader2 } from "lucide-react";
 import { byIdMap, useMe, useApiStore } from "@/client/store/apiStore";
-import { ROLE_LABEL, type CollabRequest, type RequestState, type RoleKey } from "@/client/types";
+import { ROLE_LABEL, type RoleKey, ROLES } from "@/client/types";
 import { teamCoverage } from "@/client/lib/matching";
 import { Avatar, CoverageHead, CoverageMatrix, CoverageLegend, relTime, roleTone } from "@/components/shared";
 import {
@@ -17,253 +17,21 @@ import {
   Panel,
   Reveal,
   SectionHead,
-  StateDot,
-  Tabs,
 } from "@/components/ui";
 import { cn } from "@/client/utils/cn";
 import { removeTeamMember } from "@/client/lib/api";
 
-const STATE_TONE: Record<RequestState, "accent" | "mint" | "amber" | "danger" | "neutral"> = {
-  new: "accent",
-  reviewing: "amber",
-  accepted: "mint",
-  declined: "danger",
-  withdrawn: "neutral",
-};
-
-function Requests() {
-  const [tab, setTab] = useState<"inbox" | "sent">("inbox");
-  const [loading, setLoading] = useState(true);
-  const me = useMe();
-  const requests = useApiStore((s) => s.requests);
-  const teams = useApiStore((s) => s.teams);
-  const loadTeams = useApiStore((s) => s.loadTeams);
-  const builders = useApiStore((s) => s.builders);
-  const loadBuilders = useApiStore((s) => s.loadBuilders);
-  const byId = useMemo(() => byIdMap(builders), [builders]);
-
-  // Load teams & builders on mount
-  useEffect(() => {
-    Promise.all([loadTeams(), loadBuilders()]).then(() => setLoading(false));
-  }, [loadTeams, loadBuilders]);
-
-  if (loading) {
-    return (
-      <div className="mx-auto max-w-[1400px] py-16 text-center">
-        <div className="mono-label text-fg3 animate-pulse">loading requests…</div>
-      </div>
-    );
-  }
-
-  const inbox = requests.filter((r) => r.toId === undefined || r.toId === me.id);
-  const sent = requests.filter((r) => r.fromId === me.id && r.toId !== undefined);
-  const list = tab === "inbox" ? inbox : sent;
-
-  return (
-    <div className="mx-auto max-w-[1400px]">
-      <SectionHead
-        index="03"
-        kicker="Requests"
-        title={<>Structured asks, not cold DMs.</>}
-        sub="Every request carries a role, an event and a reason. Accepting one writes straight into the roster — coverage recomputes, the slot closes, the build log updates."
-      />
-
-      <div className="mt-6">
-        <Tabs
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { id: "inbox", label: "Inbox", count: inbox.filter((r) => r.state === "new").length },
-            { id: "sent", label: "Sent", count: sent.length },
-          ]}
-        />
-      </div>
-
-      <div className="py-8">
-        {list.length === 0 ? (
-          <EmptyState
-            title={tab === "inbox" ? "Inbox is clear" : "Nothing sent yet"}
-            body={
-              tab === "inbox"
-                ? "Requests land here when someone wants a slot on one of your teams. Head to matching to see who complements your roster."
-                : "Open matching, pick a builder and send a structured request with a role and a reason."
-            }
-            action={<Link href="/match"><Button><Inbox size={13} /> Open matching</Button></Link>}
-          />
-        ) : (
-          <div className="grid gap-px border border-line bg-line md:grid-cols-2 xl:grid-cols-3">
-            {list.map((r, i) => (
-              <Reveal key={r.id} delay={i * 60}>
-                <RequestCard r={r} byId={byId} teams={teams} inbox={tab === "inbox"} />
-              </Reveal>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function RequestCard({
-  r,
-  byId,
-  teams,
-  inbox,
-}: {
-  r: CollabRequest;
-  byId: Map<string, import("@/client/types").Builder>;
-  teams: import("@/client/types").Team[];
-  inbox: boolean;
-}) {
-  const setRequestState = useApiStore((s) => s.setRequestState);
-  const acceptRequest = useApiStore((s) => s.acceptRequest);
-  const pushToast = useApiStore((s) => s.pushToast);
-  const builders = useApiStore((s) => s.builders);
-  const hackathons = useApiStore((s) => s.hackathons);
-
-  const person = byId.get(inbox ? r.fromId : (r.toId ?? r.fromId));
-  const team = teams.find((t) => t.id === r.teamId);
-  const hack = hackathons.find((h) => h.id === team?.hackathonId);
-  const otherMap = useMemo(() => byIdMap(builders), [builders]);
-  const before = team ? teamCoverage(team, otherMap, hack) : null;
-  const projected = team
-    ? teamCoverage(
-        { ...team, members: [...team.members, { builderId: r.fromId, role: r.role, joinedAt: "" }] },
-        otherMap,
-        hack,
-      )
-    : null;
-  const delta = projected && before ? projected.overall - before.overall : 0;
-
-  const act = (state: RequestState) => {
-    const prev = r.state;
-    if (state === "accepted") {
-      acceptRequest(r.id);
-      pushToast({
-        label: "Roster updated",
-        body: `${person?.name} joined ${team?.name} · coverage ${before?.overall}% → ${projected?.overall}%`,
-        tone: "good",
-      });
-    } else {
-      setRequestState(r.id, state);
-      pushToast({
-        label: state === "declined" ? "Request declined" : "Set to reviewing",
-        body: `${person?.name} · ${ROLE_LABEL[r.role]}`,
-        tone: state === "declined" ? "warn" : "info",
-        undo: () => setRequestState(r.id, prev),
-      });
-    }
-  };
-
-  return (
-    <div
-      className={cn(
-        "flex h-full flex-col bg-surface p-5 transition-opacity duration-500",
-        (r.state === "declined" || r.state === "withdrawn") && "opacity-50",
-      )}
-    >
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] tracking-[0.16em] text-fg3">{r.id}</span>
-        <span className="font-mono text-[10px] text-fg3">{relTime(r.createdAt)}</span>
-      </div>
-
-      <div className="mt-4 flex items-center gap-3">
-        {person ? <Avatar b={person} size={34} /> : <span className="h-[34px] w-[34px] border border-line bg-raised" />}
-        <div className="min-w-0 flex-1">
-          <Link href={person ? `/b/${person.id}` : "#"}
-            className="block truncate text-[14px] text-fg transition-colors hover:text-accent"
-          >
-            {person?.name ?? "Unknown"}
-          </Link>
-          <div className="font-mono text-[10px] uppercase tracking-[0.1em] text-fg3">
-            {ROLE_LABEL[r.role]} · {hack?.name ?? team?.name}
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="font-mono text-[18px] tnum text-fg">{r.score}</div>
-          <div className="mono-label text-mint">fit</div>
-        </div>
-      </div>
-
-      <p className="mt-4 flex-1 text-[13px] leading-[1.65] text-fg2">“{r.message}”</p>
-
-      <div className="mt-4 flex flex-wrap gap-1.5">
-        <Chip tone={roleTone[r.role]}>{ROLE_LABEL[r.role]}</Chip>
-        <Chip tone={STATE_TONE[r.state]}>
-          <StateDot
-            tone={
-              STATE_TONE[r.state] === "neutral"
-                ? "muted"
-                : (STATE_TONE[r.state] as "mint" | "amber" | "accent" | "danger")
-            }
-          />
-          {r.state}
-        </Chip>
-        {delta > 0 && <Chip tone="mint">+{delta}% coverage</Chip>}
-      </div>
-
-      {inbox ? (
-        <div className="mt-4 flex gap-2 border-t border-line pt-4">
-          {r.state === "accepted" ? (
-            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-mint">
-              <Check size={11} /> added to roster
-            </span>
-          ) : (
-            <>
-              <Button size="sm" onClick={() => act("accepted")} disabled={r.state === "declined"}>
-                Accept
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => act("reviewing")}>
-                Reviewing
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => act("declined")}>
-                <X size={11} /> Pass
-              </Button>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="mt-4 border-t border-line pt-4">
-          <Label tone="muted">progress</Label>
-          <div className="mt-3 flex items-center gap-1">
-            {(["new", "reviewing", "accepted"] as RequestState[]).map((s, i) => {
-              const idx = ["new", "reviewing", "accepted"].indexOf(r.state);
-              const on = i <= idx && r.state !== "declined";
-              return (
-                <div key={s} className="flex flex-1 flex-col items-center gap-1.5">
-                  <span
-                    className={cn(
-                      "h-1 w-full transition-colors",
-                      on ? "bg-mint" : "bg-hover",
-                      r.state === "declined" && i === 0 && "bg-danger",
-                    )}
-                  />
-                  <span className={cn("font-mono text-[9px] uppercase tracking-[0.1em]", on ? "text-fg2" : "text-fg3")}>
-                    {s}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {r.state === "declined" && (
-            <p className="mt-3 flex items-center gap-1.5 font-mono text-[10px] text-danger">
-              <X size={10} /> declined by {person?.name.split(" ")[0]}
-            </p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ------------------------------------------------------------------ */
-/* Teams                                                               */
+/* Teams Index                                                         */
 /* ------------------------------------------------------------------ */
 function TeamsIndex() {
   const router = useRouter();
   const teams = useApiStore((s) => s.teams);
   const hackathons = useApiStore((s) => s.hackathons);
   const builders = useApiStore((s) => s.builders);
+  const loadHackathons = useApiStore((s) => s.loadHackathons);
+  const loadTeams = useApiStore((s) => s.loadTeams);
   const activeTeamId = useApiStore((s) => s.activeTeamId);
   const setActiveTeam = useApiStore((s) => s.setActiveTeam);
   const pushToast = useApiStore((s) => s.pushToast);
@@ -272,10 +40,37 @@ function TeamsIndex() {
   const byId = useMemo(() => byIdMap(builders), [builders]);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const [hk, setHk] = useState(hackathons[0]?.id ?? "");
+  const [hk, setHk] = useState("");
   const [cap, setCap] = useState(4);
+  const [rolesNeeded, setRolesNeeded] = useState<string[]>([]);
   const [joinCode, setJoinCode] = useState("");
   const [joining, setJoining] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([loadTeams(), loadHackathons()]).then(() => setLoading(false));
+  }, [loadTeams, loadHackathons]);
+
+  // Set default hackathon once loaded
+  useEffect(() => {
+    if (!hk && hackathons.length > 0) {
+      setHk(hackathons[0].id);
+    }
+  }, [hackathons, hk]);
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-[1400px] py-16 text-center">
+        <Loader2 size={20} className="mx-auto animate-spin text-accent" />
+      </div>
+    );
+  }
+
+  const toggleRole = (role: string) => {
+    setRolesNeeded(prev =>
+      prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]
+    );
+  };
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -318,83 +113,72 @@ function TeamsIndex() {
         }
       />
 
-      <div className="grid gap-px border border-line bg-line py-8 md:grid-cols-2 xl:grid-cols-3">
-        {teams.map((t, i) => {
-          const h = hackathons.find((x) => x.id === t.hackathonId);
-          const cov = teamCoverage(t, byId, h);
-          const isActive = t.id === activeTeamId;
-          return (
-            <Reveal key={t.id} delay={i * 70}>
-              <div className={cn("flex h-full flex-col bg-surface p-5 transition-colors", isActive && "bg-raised")}>
-                <div className="flex items-start justify-between">
-                  <div>
-                    <Link href={`/teams/${t.id}`} className="display text-[19px] text-fg transition-colors hover:text-accent">
-                      {t.name}
-                    </Link>
-                    <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-fg3">
-                      {h?.name} · {t.members.length}/{h?.maxTeamSize ?? 4}
+      {teams.length === 0 ? (
+        <div className="py-16 text-center">
+          <EmptyState
+            title="No teams yet"
+            body="Create your first team to get started. Teams help you organize teammates for hackathons."
+            action={<Button onClick={() => setCreating(true)}><Send size={13} /> Create team</Button>}
+          />
+        </div>
+      ) : (
+        <div className="grid gap-px border border-line bg-line py-8 md:grid-cols-2 xl:grid-cols-3">
+          {teams.map((t, i) => {
+            const h = hackathons.find((x) => x.id === t.hackathonId);
+            const cov = teamCoverage(t, byId, h);
+            const isActive = t.id === activeTeamId;
+            return (
+              <Reveal key={t.id} delay={i * 70}>
+                <div className={cn("flex h-full flex-col bg-surface p-5 transition-colors", isActive && "bg-raised")}>
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <Link href={`/teams/${t.id}`} className="display text-[19px] text-fg transition-colors hover:text-accent">
+                        {t.name}
+                      </Link>
+                      <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-fg3">
+                        {h?.name ?? "No hackathon"} · {(t.members ?? []).length}/{t.maxMembers ?? 4}
+                      </div>
+                      <div className="mt-2 font-mono text-[9px] text-accent">
+                        Team ID: {t.id}
+                      </div>
                     </div>
-                    <div className="mt-2 font-mono text-[9px] text-accent">
-                      Team ID: {t.id}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setActiveTeam(t.id);
-                      pushToast({ label: "Active team", body: `${t.name} is now the matching context.`, tone: "info" });
-                    }}
-                    className={cn(
-                      "border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.14em] transition-colors",
-                      isActive ? "border-accent-line bg-accent-soft text-accent" : "border-line text-fg3 hover:text-fg",
-                    )}
-                  >
-                    {isActive ? "active" : "set active"}
-                  </button>
-                </div>
-
-                <div className="mt-5 flex items-center gap-4">
-                  <CoverageHead coverage={cov} />
-                </div>
-
-                <div className="mt-4 flex -space-x-2">
-                  {t.members.map((m) => {
-                    const b = byId.get(m.builderId);
-                    return b ? <Avatar key={m.builderId} b={b} size={28} /> : null;
-                  })}
-                  {t.openSlots.map((o) => (
-                    <span
-                      key={o.role}
-                      title={`${ROLE_LABEL[o.role]} · ${o.note}`}
-                      className="flex h-7 w-7 items-center justify-center border border-dashed border-amber-line bg-amber-soft font-mono text-[9px] text-amber"
+                    <button
+                      onClick={() => {
+                        setActiveTeam(t.id);
+                        pushToast({ label: "Active team", body: `${t.name} is now the matching context.`, tone: "info" });
+                      }}
+                      className={cn(
+                        "border px-2 py-1 font-mono text-[9px] uppercase tracking-[0.14em] transition-colors",
+                        isActive ? "border-accent-line bg-accent-soft text-accent" : "border-line text-fg3 hover:text-fg",
+                      )}
                     >
-                      +
-                    </span>
-                  ))}
-                </div>
+                      {isActive ? "active" : "set active"}
+                    </button>
+                  </div>
 
-                <div className="mt-4 flex flex-wrap gap-1.5">
-                  {t.openSlots.map((o) => (
-                    <Chip key={o.role} tone="amber">{ROLE_LABEL[o.role]} open</Chip>
-                  ))}
-                  {t.openSlots.length === 0 && <Chip tone="mint">roster full</Chip>}
-                  <Chip>{t.visibility}</Chip>
-                </div>
+                  <div className="mt-5 flex items-center gap-4">
+                    <CoverageHead coverage={cov} />
+                  </div>
 
-                <div className="mt-5 flex gap-2 border-t border-line pt-4">
-                  <Link href={`/teams/${t.id}`} className="flex-1">
-                    <Button size="sm" variant="outline" className="w-full">Workspace</Button>
-                  </Link>
-                  {t.project && (
-                    <Link href={`/projects/${t.project}`} className="flex-1">
-                      <Button size="sm" className="w-full">Project</Button>
+                  <div className="mt-4 flex flex-wrap gap-1.5">
+                    {(t.rolesNeeded ?? []).map((role: string) => (
+                      <Chip key={role} tone="amber">{ROLE_LABEL[role as RoleKey] ?? role} open</Chip>
+                    ))}
+                    {(t.rolesNeeded ?? []).length === 0 && <Chip tone="mint">roster full</Chip>}
+                    <Chip>{t.visibility ?? (t.isOpen ? "discoverable" : "private")}</Chip>
+                  </div>
+
+                  <div className="mt-5 flex gap-2 border-t border-line pt-4">
+                    <Link href={`/teams/${t.id}`} className="flex-1">
+                      <Button size="sm" variant="outline" className="w-full">Workspace</Button>
                     </Link>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </Reveal>
-          );
-        })}
-      </div>
+              </Reveal>
+            );
+          })}
+        </div>
+      )}
 
       <AnimatePresence>
         {creating && (
@@ -416,7 +200,7 @@ function TeamsIndex() {
               <Label tone="fg">create team</Label>
               <div className="mt-4 space-y-4">
                 <div>
-                  <span className="mono-label mb-2 block text-fg3">team name</span>
+                  <span className="mono-label mb-2 block text-fg3">team name *</span>
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -431,17 +215,19 @@ function TeamsIndex() {
                     onChange={(e) => setHk(e.target.value)}
                     className="w-full border border-line bg-raised px-3 py-2.5 text-[13px] text-fg focus:border-accent focus:outline-none"
                   >
+                    <option value="">— none —</option>
                     {hackathons.filter((h) => h.status !== "closed").map((h) => (
-                      <option key={h.id} value={h.id}>{h.name} · {h.code}</option>
+                      <option key={h.id} value={h.id}>{h.name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
                   <span className="mono-label mb-2 block text-fg3">max size</span>
                   <div className="flex gap-px border border-line bg-raised p-px">
-                    {[3, 4, 5].map((n) => (
+                    {[3, 4, 5, 6].map((n) => (
                       <button
                         key={n}
+                        type="button"
                         onClick={() => setCap(n)}
                         className={cn(
                           "flex-1 py-2 font-mono text-[12px] tnum transition-colors",
@@ -449,6 +235,26 @@ function TeamsIndex() {
                         )}
                       >
                         {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <span className="mono-label mb-2 block text-fg3">roles needed</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ROLES.map((role) => (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => toggleRole(role)}
+                        className={cn(
+                          "px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest border transition-colors",
+                          rolesNeeded.includes(role)
+                            ? "border-accent bg-accent-soft text-accent"
+                            : "border-line text-fg3 hover:text-fg",
+                        )}
+                      >
+                        {ROLE_LABEL[role as RoleKey]}
                       </button>
                     ))}
                   </div>
@@ -462,16 +268,17 @@ function TeamsIndex() {
                   onClick={async () => {
                     const id = await createTeam({
                       name: name.trim(),
-                      hackathonId: hk,
-                      ownerId: me.id,
-                      members: [{ builderId: me.id, role: me.role, joinedAt: new Date().toISOString() }],
-                      openSlots: [],
-                      visibility: "discoverable",
+                      hackathonId: hk || undefined,
+                      maxMembers: cap,
+                      rolesNeeded,
+                      isOpen: true,
                     });
-                    pushToast({ label: "Team created", body: `${name.trim()} is now your active team.`, tone: "good" });
-                    setCreating(false);
-                    setName("");
-                    router.push(`/teams/${id}`);
+                    if (id) {
+                      setCreating(false);
+                      setName("");
+                      setRolesNeeded([]);
+                      router.push(`/teams/${id}`);
+                    }
                   }}
                 >
                   Create
@@ -493,8 +300,8 @@ function TeamWorkspace() {
   const teams = useApiStore((s) => s.teams);
   const builders = useApiStore((s) => s.builders);
   const hackathons = useApiStore((s) => s.hackathons);
-  const projects = useApiStore((s) => s.projects);
   const requests = useApiStore((s) => s.requests);
+  const projects = useApiStore((s) => s.projects);
   const pushToast = useApiStore((s) => s.pushToast);
   const loadTeams = useApiStore((s) => s.loadTeams);
   const me = useMe();
@@ -503,7 +310,11 @@ function TeamWorkspace() {
   const team = teams.find((t) => t.id === id) ?? teams[0];
   const hack = hackathons.find((h) => h.id === team?.hackathonId);
   const project = projects.find((p) => p.id === team?.project);
-  const pending = requests.filter((r) => r.teamId === team?.id && r.state === "new");
+  // pending requests for this team using real DB field names
+  const pending = requests.filter((r: any) => {
+    const req = r.request ?? r;
+    return req.teamId === team?.id && req.status === "pending";
+  });
 
   const cov = useMemo(
     () => (team ? teamCoverage(team, byId, hack) : null),
@@ -703,14 +514,23 @@ function TeamWorkspace() {
                 <p className="px-5 py-4 text-[12.5px] text-fg2">Nothing waiting. Coverage is what it is.</p>
               ) : (
                 <div className="divide-y divide-line">
-                  {pending.slice(0, 3).map((r) => {
-                    const b = byId.get(r.fromId);
+                  {pending.slice(0, 3).map((r: any) => {
+                    const req = r.request ?? r;
+                    const fromProfile = r.from ?? null;
+                    const b = byId.get(req.fromUserId) ?? (fromProfile ? {
+                      id: fromProfile.id,
+                      name: fromProfile.fullName ?? fromProfile.username ?? "Unknown",
+                      handle: fromProfile.username ?? "",
+                      avatarUrl: fromProfile.avatarUrl,
+                      initials: (fromProfile.fullName ?? "?").slice(0, 2).toUpperCase(),
+                      skills: [],
+                    } : null);
                     return (
-                      <div key={r.id} className="flex items-center gap-3 px-5 py-3">
-                        {b && <Avatar b={b} size={26} />}
+                      <div key={req.id} className="flex items-center gap-3 px-5 py-3">
+                        {b && <Avatar b={b as any} size={26} />}
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-[12.5px] text-fg">{b?.name}</div>
-                          <div className="font-mono text-[10px] text-fg3">{ROLE_LABEL[r.role]} · {r.score}%</div>
+                          <div className="truncate text-[12.5px] text-fg">{b?.name ?? "Unknown"}</div>
+                          <div className="font-mono text-[10px] text-fg3">{req.roleOffered ?? "—"}</div>
                         </div>
                         <Link href="/requests">
                           <Button size="sm" variant="outline">Review</Button>

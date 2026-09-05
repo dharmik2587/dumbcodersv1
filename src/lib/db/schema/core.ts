@@ -418,11 +418,43 @@ export const directMessages = pgTable(
   }),
 );
 
+export const connectedAccounts = pgTable(
+  'connected_accounts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    provider: text('provider').notNull(), // 'leetcode'
+    providerUsername: text('provider_username').notNull(),
+    providerUserId: text('provider_user_id'),
+    verificationCode: text('verification_code'),
+    verificationStatus: text('verification_status').notNull().default('pending'), // 'pending' | 'verified' | 'failed'
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
+  },
+  (table) => ({
+    userProviderUnique: uniqueIndex('connected_accounts_user_provider_unique_idx').on(
+      table.userId,
+      table.provider,
+    ),
+    providerUsernameUnique: uniqueIndex('connected_accounts_provider_username_unique_idx').on(
+      table.provider,
+      table.providerUsername,
+    ),
+    verificationStatusIdx: index('connected_accounts_status_idx').on(table.verificationStatus),
+  }),
+);
+
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
 export type College = typeof colleges.$inferSelect;
 export type GithubData = typeof githubData.$inferSelect;
 export type LeetcodeData = typeof leetcodeData.$inferSelect;
+export type ConnectedAccount = typeof connectedAccounts.$inferSelect;
+export type NewConnectedAccount = typeof connectedAccounts.$inferInsert;
 export type Hackathon = typeof hackathons.$inferSelect;
 export type HackathonSource = typeof hackathonSources.$inferSelect;
 export type Team = typeof teams.$inferSelect;

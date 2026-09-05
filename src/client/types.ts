@@ -104,6 +104,7 @@ export type Team = {
   members: TeamMember[];
   openSlots: { role: RoleKey; note: string }[];
   project?: string;
+  maxMembers?: number;
   visibility: "private" | "discoverable";
   leaderId?: string;
   rolesNeeded?: string[];

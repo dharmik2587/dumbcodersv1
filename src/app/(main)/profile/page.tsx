@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GitBranch, Globe, GraduationCap, Plus, Save, Trash2 } from "lucide-react";
 import { useMe, useApiStore } from "@/client/store/apiStore";
 import { useStore } from "@/client/store/useStore";
@@ -25,7 +25,7 @@ import { cn } from "@/client/utils/cn";
 
 export default function Profile() {
   const initialMe = useMe();
-  // We use local state for the form draft, so we don't accidentally modify the mock store
+  // We use local state for the form draft
   const [me, setMe] = useState(() => initialMe);
   const pushToast = useApiStore((s) => s.pushToast);
   const updateProfileApi = useApiStore((s) => s.updateProfile);
@@ -34,6 +34,13 @@ export default function Profile() {
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [snapshot] = useState(() => JSON.stringify(initialMe));
+
+  // Sync state if user data loads after initial mount
+  useEffect(() => {
+    if (!dirty && initialMe && initialMe.id !== 'me-guest') {
+      setMe(initialMe);
+    }
+  }, [initialMe, dirty]);
 
   const patch = (p: Partial<typeof me>) => {
     setMe((prev) => ({ ...prev, ...p }));
@@ -55,7 +62,7 @@ export default function Profile() {
         rolePreference: me.role,
         skills: selectedSkills,
         isOpenToTeam: me.openToTeams,
-        availability: me.availability.length > 0 ? `${me.availability.length} active slots` : undefined,
+        availability: JSON.stringify(me.availability),
       });
       await loadUser();
     } catch (e) {
@@ -68,10 +75,10 @@ export default function Profile() {
 
   const setSkillLevel = (id: string, level: 0 | 1 | 2 | 3) => {
     const exists = me.skills.find((s) => s.id === id);
+    const meta = CLUSTERS.find((c) => c.label.toLowerCase().replace(/[^a-z]+/g, "-") === id);
     if (exists) {
       patch({ skills: me.skills.map((s) => (s.id === id ? { ...s, level } : s)) });
     } else {
-      const meta = CLUSTERS.find((c) => c.label.toLowerCase().replace(/[^a-z]+/g, "-") === id);
       patch({
         skills: [
           ...me.skills,
@@ -88,7 +95,7 @@ export default function Profile() {
 
   const completeness = Math.round(
     (me.bio ? 15 : 0) +
-      Math.min(30, me.skills.filter((s) => s.level > 0).length * 4) +
+      Math.min(30, me.skills.filter((s) => s.level > 0).length * 5) +
       Math.min(20, me.projects.length * 10) +
       Math.min(15, me.repos.length * 7) +
       (me.availability.length ? 12 : 0) +
@@ -97,10 +104,8 @@ export default function Profile() {
 
   const gaps = [
     me.bio ? null : "Write a one-line bio",
-    me.skills.filter((s) => s.level > 0).length < 8 ? "Rate at least 8 skills" : null,
-    me.projects.length < 3 ? "Add a third shipped project" : null,
-    me.repos.length < 3 ? "Link another repository" : null,
-    me.availability.length < 4 ? "Mark at least 4 available days" : null,
+    me.skills.filter((s) => s.level > 0).length < 4 ? "Select at least 4 skills" : null,
+    me.availability.length < 2 ? "Pick at least 2 available time slots" : null,
   ].filter(Boolean) as string[];
 
   return (
@@ -228,7 +233,7 @@ export default function Profile() {
               <div className="flex items-center justify-between border-b border-line px-5 py-3">
                 <Label tone="accent">skills</Label>
                 <span className="font-mono text-[10px] text-fg3">
-                  {me.skills.filter((s) => s.level > 0).length} rated
+                  {me.skills.filter((s) => s.level > 0).length} selected
                 </span>
               </div>
               <div className="divide-y divide-line">

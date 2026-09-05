@@ -563,20 +563,16 @@ function RequestComposer({
               <Button
                 size="sm"
                 disabled={message.trim().length < 12}
-                onClick={() => {
-                  sendRequest({
-                    fromId: me.id,
-                    toId: candidate.builder.id,
-                    teamId: team.id,
-                    role,
-                    message: message.trim(),
-                    score: candidate.total,
-                  });
-                  pushToast({
-                    label: "Request sent",
-                    body: `${candidate.builder.name} · ${ROLE_LABEL[role]} for ${team.name}`,
-                    tone: "good",
-                  });
+                onClick={async () => {
+                  try {
+                    await sendRequest({
+                      toUserId: candidate.builder.id,
+                      teamId: team.id,
+                      hackathonId: team.hackathonId ?? null,
+                      message: message.trim(),
+                      roleOffered: role,
+                    });
+                  } catch {}
                   setMessage("");
                   onClose();
                 }}

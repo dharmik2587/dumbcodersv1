@@ -31,6 +31,8 @@ export interface CreateTeamData {
   hackathonId?: string;
   description?: string;
   rolesNeeded?: string[];
+  maxMembers?: number;
+  isOpen?: boolean;
 }
 
 export async function listMyTeams(): Promise<Team[]> {

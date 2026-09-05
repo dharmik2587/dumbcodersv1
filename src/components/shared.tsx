@@ -80,7 +80,9 @@ export function Avatar({
   return link ? <Link href={`/b/${b.id}`}>{el}</Link> : el;
 }
 
-/* ---------------- level control ---------------- */
+import { Check } from "lucide-react";
+
+/* ---------------- level control / skill tick ---------------- */
 export const LEVEL_LABEL = ["none", "contribute", "ships", "owns it"];
 
 export function LevelPicker({
@@ -92,30 +94,23 @@ export function LevelPicker({
   onChange: (v: 0 | 1 | 2 | 3) => void;
   label: string;
 }) {
+  const isSelected = value > 0;
   return (
-    <div className="flex gap-px border border-line bg-raised p-px" role="radiogroup" aria-label={label}>
-      {([0, 1, 2, 3] as const).map((lv) => (
-        <button
-          key={lv}
-          role="radio"
-          aria-checked={value === lv}
-          aria-label={`${label}: ${LEVEL_LABEL[lv]}`}
-          onClick={() => onChange(lv)}
-          className={cn(
-            "h-5 w-6 transition-all duration-200",
-            value === lv
-              ? lv === 0
-                ? "bg-hover"
-                : lv === 1
-                  ? "bg-accent/30"
-                  : lv === 2
-                    ? "bg-accent/65"
-                    : "bg-accent"
-              : "hover:bg-hover",
-          )}
-        />
-      ))}
-    </div>
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={isSelected}
+      aria-label={`${label}: ${isSelected ? "skilled" : "not selected"}`}
+      onClick={() => onChange(isSelected ? 0 : 3)}
+      className={cn(
+        "flex h-7 w-7 items-center justify-center border transition-all duration-150",
+        isSelected
+          ? "border-accent bg-accent text-canvas shadow-sm"
+          : "border-line bg-raised text-transparent hover:border-line-strong hover:text-fg3/30"
+      )}
+    >
+      <Check size={14} strokeWidth={3} className={isSelected ? "text-canvas" : ""} />
+    </button>
   );
 }
 
@@ -145,8 +140,16 @@ export function LevelCell({ level, gap, delay = 0 }: { level: number; gap?: bool
   );
 }
 
-/* ---------------- availability grid ---------------- */
-const DAYS = ["M", "T", "W", "T", "F", "S", "S"];
+/* ---------------- availability grid & easy slot selector ---------------- */
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const FULL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+const SLOTS = [
+  { id: "morning", label: "Morning", sub: "9am - 1pm", start: 9, end: 13 },
+  { id: "afternoon", label: "Afternoon", sub: "1pm - 5pm", start: 13, end: 17 },
+  { id: "evening", label: "Evening", sub: "5pm - 9pm", start: 17, end: 21 },
+  { id: "night", label: "Night Owl", sub: "9pm - 1am", start: 21, end: 25 },
+];
 
 export function AvailabilityGrid({
   value,
@@ -159,97 +162,104 @@ export function AvailabilityGrid({
   editable?: boolean;
   compact?: boolean;
 }) {
-  const [cells, setCells] = useState<boolean[][]>(() => {
-    const g = Array.from({ length: 7 }, () => Array(24).fill(false));
-    value.forEach((s) => {
-      for (let h = s.start; h < s.end; h++) if (g[s.day]) g[s.day][h] = true;
-    });
-    return g;
-  });
-  const [painting, setPainting] = useState(false);
-  const [paintVal, setPaintVal] = useState(true);
-
-  const commit = (next: boolean[][]) => {
-    setCells(next);
-    if (!onChange) return;
-    const slots: { day: number; start: number; end: number }[] = [];
-    next.forEach((row, d) => {
-      let start = -1;
-      row.forEach((on, h) => {
-        if (on && start === -1) start = h;
-        if ((!on || h === 23) && start !== -1) {
-          slots.push({ day: d, start, end: on && h === 23 ? 24 : h });
-          start = -1;
-        }
-      });
-    });
-    onChange(slots);
+  // Check if a day has any slots overlapping the given time interval
+  const isSlotActive = (dayIdx: number, slotStart: number, slotEnd: number) => {
+    return value.some((s) => s.day === dayIdx && s.start < slotEnd && s.end > slotStart);
   };
 
-  const set = (d: number, h: number, v: boolean) => {
-    if (!editable) return;
-    const next = cells.map((r) => [...r]);
-    next[d][h] = v;
-    commit(next);
+  const toggleSlot = (dayIdx: number, slotStart: number, slotEnd: number) => {
+    if (!editable || !onChange) return;
+    const active = isSlotActive(dayIdx, slotStart, slotEnd);
+    let next: { day: number; start: number; end: number }[];
+    if (active) {
+      // Remove overlapping slots for this day & time
+      next = value.filter(
+        (s) => !(s.day === dayIdx && s.start === slotStart && s.end === (slotEnd === 25 ? 24 : slotEnd))
+      );
+    } else {
+      // Add slot
+      next = [
+        ...value,
+        { day: dayIdx, start: slotStart, end: slotEnd === 25 ? 24 : slotEnd },
+      ];
+    }
+    onChange(next);
   };
 
-  const total = useMemo(
-    () => cells.reduce((a, r) => a + r.filter(Boolean).length, 0),
-    [cells],
-  );
+  const totalHours = useMemo(() => {
+    return value.reduce((acc, s) => acc + (s.end - s.start), 0);
+  }, [value]);
+
+  const activeDaysCount = useMemo(() => {
+    const daysSet = new Set(value.map((s) => s.day));
+    return daysSet.size;
+  }, [value]);
 
   return (
-    <div>
-      <div className="scroll-x">
-        <div className="min-w-[460px]" onMouseLeave={() => setPainting(false)}>
-          {!compact && (
-            <div className="mb-1 flex gap-px pl-7">
-              {Array.from({ length: 24 }, (_, h) => (
-                <span
-                  key={h}
-                  className="flex-1 text-center font-mono text-[8px] text-fg3"
-                >
-                  {h % 4 === 0 ? h : ""}
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:grid-cols-7">
+        {DAYS.map((dayLabel, dIdx) => {
+          const dayActiveCount = SLOTS.filter((slot) =>
+            isSlotActive(dIdx, slot.start, slot.end)
+          ).length;
+          return (
+            <div
+              key={dayLabel}
+              className={cn(
+                "flex flex-col border border-line bg-raised/50 p-2.5 transition-colors",
+                dayActiveCount > 0 && "border-line-strong bg-raised"
+              )}
+            >
+              <div className="mb-2 flex items-center justify-between border-b border-line pb-1.5">
+                <span className="font-mono text-[11px] font-medium text-fg">{dayLabel}</span>
+                <span className="font-mono text-[9px] text-fg3">
+                  {dayActiveCount > 0 ? `${dayActiveCount * 4}h` : "—"}
                 </span>
-              ))}
+              </div>
+              <div className="space-y-1.5">
+                {SLOTS.map((slot) => {
+                  const on = isSlotActive(dIdx, slot.start, slot.end);
+                  return (
+                    <button
+                      key={slot.id}
+                      type="button"
+                      disabled={!editable}
+                      onClick={() => toggleSlot(dIdx, slot.start, slot.end)}
+                      className={cn(
+                        "flex w-full flex-col items-start px-2 py-1.5 text-left border transition-all text-[11px]",
+                        on
+                          ? "border-accent bg-accent text-canvas font-medium shadow-sm"
+                          : "border-line/60 bg-surface/60 text-fg2 hover:border-line-strong hover:text-fg hover:bg-hover"
+                      )}
+                    >
+                      <span className="leading-tight">{slot.label}</span>
+                      <span className={cn("text-[9px] font-mono leading-none mt-0.5", on ? "text-canvas/80" : "text-fg3")}>
+                        {slot.sub}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
-          {cells.map((row, d) => (
-            <div key={d} className="mb-px flex items-center gap-px">
-              <span className="w-6 shrink-0 font-mono text-[9px] uppercase text-fg3">
-                {DAYS[d]}
-              </span>
-              {row.map((on, h) => (
-                <button
-                  key={h}
-                  type="button"
-                  tabIndex={editable ? 0 : -1}
-                  aria-label={`${DAYS[d]}ay ${h}:00 ${on ? "free" : "unavailable"}`}
-                  onMouseDown={() => {
-                    if (!editable) return;
-                    setPainting(true);
-                    setPaintVal(!on);
-                    set(d, h, !on);
-                  }}
-                  onMouseEnter={() => {
-                    if (editable && painting) set(d, h, paintVal);
-                  }}
-                  onMouseUp={() => setPainting(false)}
-                  className={cn(
-                    "h-5 flex-1 border border-transparent transition-colors duration-100",
-                    on ? "bg-accent" : "bg-hover hover:bg-line",
-                    !editable && "cursor-default",
-                  )}
-                />
-              ))}
-            </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
+
       {editable && (
-        <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-fg3">
-          drag to paint · {total} free hours / week
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3 font-mono text-[10.5px]">
+          <div className="flex items-center gap-2 text-fg3">
+            <span className="inline-block h-2 w-2 rounded-full bg-accent" />
+            <span>Click any day & slot to toggle availability</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-fg3">
+              <span className="text-fg font-medium">{activeDaysCount}</span> days active
+            </span>
+            <span className="text-accent font-medium">
+              ~{totalHours} hrs / week
+            </span>
+          </div>
+        </div>
       )}
     </div>
   );

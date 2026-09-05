@@ -115,8 +115,8 @@ function RequestCard({
   teams: import("@/client/types").Team[];
   inbox: boolean;
 }) {
-  const setRequestState = useApiStore((s) => s.setRequestState);
   const acceptRequest = useApiStore((s) => s.acceptRequest);
+  const rejectRequest = useApiStore((s) => s.rejectRequest);
   const pushToast = useApiStore((s) => s.pushToast);
   const builders = useApiStore((s) => s.builders);
   const hackathons = useApiStore((s) => s.hackathons);
@@ -135,23 +135,11 @@ function RequestCard({
     : null;
   const delta = projected && before ? projected.overall - before.overall : 0;
 
-  const act = (state: RequestState) => {
-    const prev = r.state;
-    if (state === "accepted") {
-      acceptRequest(r.id);
-      pushToast({
-        label: "Roster updated",
-        body: `${person?.name} joined ${team?.name} · coverage ${before?.overall}% → ${projected?.overall}%`,
-        tone: "good",
-      });
+  const act = async (action: "accept" | "reject") => {
+    if (action === "accept") {
+      await acceptRequest(r.id);
     } else {
-      setRequestState(r.id, state);
-      pushToast({
-        label: state === "declined" ? "Request declined" : "Set to reviewing",
-        body: `${person?.name} · ${ROLE_LABEL[r.role]}`,
-        tone: state === "declined" ? "warn" : "info",
-        undo: () => setRequestState(r.id, prev),
-      });
+      await rejectRequest(r.id);
     }
   };
 
@@ -210,13 +198,10 @@ function RequestCard({
             </span>
           ) : (
             <>
-              <Button size="sm" onClick={() => act("accepted")} disabled={r.state === "declined"}>
+              <Button size="sm" onClick={() => act("accept")} disabled={r.state === "declined"}>
                 Accept
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => act("reviewing")}>
-                Reviewing
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => act("declined")}>
+              <Button size="sm" variant="ghost" onClick={() => act("reject")}>
                 <X size={11} /> Pass
               </Button>
             </>
@@ -678,7 +663,7 @@ function TeamWorkspace() {
                         {b && <Avatar b={b} size={26} />}
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[12.5px] text-fg">{b?.name}</div>
-                          <div className="font-mono text-[10px] text-fg3">{ROLE_LABEL[r.role]} · {r.score}%</div>
+                          <div className="font-mono text-[10px] text-fg3">{r.role ? (ROLE_LABEL[r.role as RoleKey] ?? r.role) : '—'}</div>
                         </div>
                         <Link href="/requests">
                           <Button size="sm" variant="outline">Review</Button>
