@@ -201,18 +201,20 @@ export const useApiStore = create<State>()(
         try {
           const authState = await auth.getCurrentAuthState();
           if (authState.user) {
+            // Always set fresh data from Supabase user first
             const initialBuilder = (get() as any)._mapAuthUserToBuilder(authState.user);
             set({
               isAuthenticated: true,
               isLoading: false,
-              me: get().me && get().me?.name !== 'Demo Builder' ? get().me : initialBuilder,
+              me: initialBuilder,
             });
+            // Then load full profile from Neon DB (overwrites initialBuilder)
             try {
               await get().loadUser();
               await get().loadTeams();
               await get().loadRequests();
             } catch (e) {
-              // Data loading errors shouldn't block auth init
+              console.warn('Data loading during auth init:', e);
             }
           } else {
             set({ isAuthenticated: false, isLoading: false, me: null });
@@ -221,6 +223,36 @@ export const useApiStore = create<State>()(
           console.error('Auth initialization error:', error);
           set({ isAuthenticated: false, isLoading: false, me: null });
         }
+
+        // Listen for auth state changes (handles OAuth callback, tab sync, etc.)
+        auth.onAuthStateChange(async (event, session) => {
+          if (event === 'SIGNED_IN' && session?.user) {
+            const builder = (get() as any)._mapAuthUserToBuilder(session.user);
+            set({ isAuthenticated: true, isLoading: false, me: builder });
+            try {
+              await get().loadUser();
+              await get().loadTeams();
+              await get().loadRequests();
+            } catch (e) {
+              console.warn('Data loading on auth change:', e);
+            }
+          } else if (event === 'SIGNED_OUT') {
+            set({
+              isAuthenticated: false,
+              isLoading: false,
+              me: null,
+              teams: [],
+              builders: [],
+              projects: [],
+              requests: [],
+              bookmarks: [],
+              activeTeamId: null,
+              leaderboard: [],
+            });
+          } else if (event === 'TOKEN_REFRESHED' && session?.user) {
+            // Session refreshed — user still valid, no need to reload everything
+          }
+        });
       },
 
       // Sign up
@@ -316,6 +348,10 @@ export const useApiStore = create<State>()(
             activeTeamId: null,
             leaderboard: [],
           });
+          // Clear persisted state so stale data doesn't rehydrate on next login
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('hackmate.api.state.v3');
+          }
           get().pushToast({
             label: 'Success',
             body: 'Signed out successfully',
@@ -584,15 +620,15 @@ export const useApiStore = create<State>()(
         set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
     }),
     {
-      name: 'hackmate.api.state.v2',
-      partialize: (s) => {
-        const { toasts, hackathons, builders, leaderboard, ...rest } = s;
-        return {
-          ...rest,
-          teams: s.teams,
-          notifications: s.notifications,
-        } as never;
-      },
+      name: 'hackmate.api.state.v3',
+      version: 3,
+      partialize: (s) => ({
+        // Only persist lightweight, non-auth state.
+        // Auth state (me, isAuthenticated, isLoading) is ALWAYS
+        // re-computed from the server on page load via initializeAuth.
+        bookmarks: s.bookmarks,
+        activeTeamId: s.activeTeamId,
+      } as never),
     },
   ),
 );

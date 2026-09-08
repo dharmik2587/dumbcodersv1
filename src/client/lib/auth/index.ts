@@ -16,6 +16,7 @@ export interface AuthState {
     user_metadata?: {
       full_name?: string;
       avatar_url?: string;
+      [key: string]: any;
     };
   } | null;
   session: {
@@ -25,22 +26,35 @@ export interface AuthState {
   loading: boolean;
 }
 
+/**
+ * Get the current auth state using getUser() which validates the JWT
+ * with the Supabase server. This is more reliable than getSession()
+ * because it works properly with cookie-based auth (SSR/OAuth flows).
+ */
 export async function getCurrentAuthState(): Promise<AuthState> {
-  const { data: { session }, error } = await supabase.auth.getSession();
+  try {
+    // getUser() validates the token server-side and syncs from cookies
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-  if (error) {
-    console.error('Error getting session:', error);
+    if (userError || !user) {
+      return { user: null, session: null, loading: false };
+    }
+
+    // Now get the session for tokens (needed for API calls)
+    const { data: { session } } = await supabase.auth.getSession();
+
+    return {
+      user,
+      session: session ? {
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      } : null,
+      loading: false,
+    };
+  } catch (error) {
+    console.error('Error getting auth state:', error);
     return { user: null, session: null, loading: false };
   }
-
-  return {
-    user: session?.user || null,
-    session: session ? {
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-    } : null,
-    loading: false,
-  };
 }
 
 export async function signIn(email: string, password: string) {
@@ -70,7 +84,7 @@ export async function signInWithGoogle(redirectTo?: string) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo || '/onboarding')}`,
+      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo || '/discover')}`,
       queryParams: {
         access_type: 'offline',
         prompt: 'consent',
@@ -86,7 +100,7 @@ export async function signInWithGitHub(redirectTo?: string) {
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'github',
     options: {
-      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo || '/onboarding')}`,
+      redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo || '/discover')}`,
       scopes: 'user:email read:user',
     },
   });

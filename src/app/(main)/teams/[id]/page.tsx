@@ -22,6 +22,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/client/utils/cn";
 import { removeTeamMember } from "@/client/lib/api";
+import { TeamChat } from "@/components/chat/TeamChat";
 
 const STATE_TONE: Record<RequestState, "accent" | "mint" | "amber" | "danger" | "neutral"> = {
   new: "accent",
@@ -674,6 +675,10 @@ function TeamWorkspace() {
                 </div>
               )}
             </Panel>
+          </Reveal>
+
+          <Reveal delay={140}>
+            <TeamChat teamId={team.id} currentUserId={me.id} />
           </Reveal>
         </div>
       </div>
