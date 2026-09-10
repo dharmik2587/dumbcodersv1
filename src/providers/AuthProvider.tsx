@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
+import { useApiStore } from '@/client/store/apiStore';
 
 type AuthContextType = {
   user: User | null;
@@ -33,6 +34,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const supabase = createClient();
+    
+    // Initialize Zustand apiStore globally so user profile/teams load
+    useApiStore.getState().initializeAuth();
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
