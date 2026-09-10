@@ -123,7 +123,25 @@ export async function fetchLeetcodePublicProfile(username: string): Promise<Leet
 /**
  * Parses raw LeetCode GraphQL matchedUser response into a clean LeetcodePublicProfile.
  */
-export function parseLeetcodeProfile(matchedUser: any): LeetcodePublicProfile {
+export interface RawLeetcodeMatchedUser {
+  username: string;
+  githubUrl?: string | null;
+  twitterUrl?: string | null;
+  linkedinUrl?: string | null;
+  profile?: {
+    realName?: string | null;
+    aboutMe?: string | null;
+    userAvatar?: string | null;
+    ranking?: number | null;
+    websites?: string[];
+    skillTags?: string[];
+  };
+  submitStatsGlobal?: {
+    acSubmissionNum?: Array<{ difficulty: string; count: number }>;
+  };
+}
+
+export function parseLeetcodeProfile(matchedUser: RawLeetcodeMatchedUser): LeetcodePublicProfile {
   return {
     username: matchedUser.username,
     realName: matchedUser.profile?.realName ?? null,
@@ -192,7 +210,16 @@ export async function fetchLeetcodeStats(username: string): Promise<LeetcodeStat
 /**
  * Parses raw LeetCode GraphQL data object into LeetcodeStats.
  */
-export function parseLeetcodeStats(data: any): LeetcodeStats {
+export interface RawLeetcodeStatsData {
+  matchedUser: RawLeetcodeMatchedUser;
+  userContestRanking?: {
+    rating?: number | null;
+    attendedContestsCount?: number | null;
+    globalRanking?: number | null;
+  } | null;
+}
+
+export function parseLeetcodeStats(data: RawLeetcodeStatsData): LeetcodeStats {
   const user = data.matchedUser;
   const submissions: Array<{ difficulty: string; count: number }> =
     user.submitStatsGlobal?.acSubmissionNum ?? [];

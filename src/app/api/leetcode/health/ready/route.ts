@@ -30,12 +30,12 @@ export async function GET() {
       status: 'ready',
       timestamp: new Date().toISOString(),
     }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     return Response.json({
       success: false,
       status: 'not_ready',
       error: 'DATABASE_ERROR',
-      message: error.message || 'Database readiness check failed.',
+      message: error instanceof Error ? error.message : 'Database readiness check failed.',
     }, { status: 503 });
   }
 }

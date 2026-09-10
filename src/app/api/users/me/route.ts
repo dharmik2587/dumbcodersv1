@@ -5,6 +5,7 @@ import { getProfileById, updateProfile } from '@/lib/db/queries/profiles';
 import { ensureStudentProfile } from '@/lib/profile/student';
 import { failure, success } from '@/lib/http';
 import { profileUpdateSchema } from '@/lib/validations/profile';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -16,7 +17,7 @@ export async function GET() {
   try {
     const profile = await ensureStudentProfile(user);
     return success(profile);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('GET /api/users/me failed', error);
     return failure('DATABASE_ERROR', 'Could not load your profile.', 500);
   }
@@ -32,6 +33,9 @@ export async function PATCH(request: NextRequest) {
 
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
 
+  const rl = await enforceRateLimit(`profile-edit:${user.id}`, 20, 60);
+  if (!rl.success && rl.response) return rl.response;
+
   const body = await request.json().catch(() => null);
   const parsed = profileUpdateSchema.safeParse(body);
   if (!parsed.success) {
@@ -46,7 +50,7 @@ export async function PATCH(request: NextRequest) {
     const updated = await updateProfile(user.id, parsed.data);
     if (!updated) return failure('PROFILE_NOT_FOUND', 'Profile could not be updated.', 404);
     return success(updated);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('PATCH /api/users/me failed:', error);
     const msg = error instanceof Error ? error.message : String(error);
     return failure('DATABASE_ERROR', `Could not update your profile: ${msg}`, 500);

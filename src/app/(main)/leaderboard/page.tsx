@@ -100,10 +100,10 @@ function LinkAccountPanel() {
         body: `Add "${res.verification_code}" to your LeetCode profile about section.`,
         tone: "info",
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       pushToast({
         label: "Connection Failed",
-        body: err.message || "Could not generate verification code.",
+        body: err instanceof Error ? err.message : "Could not generate verification code.",
         tone: "bad",
       });
     } finally {
@@ -127,10 +127,10 @@ function LinkAccountPanel() {
         });
         await loadLeaderboard();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       pushToast({
         label: "Verification Failed",
-        body: err.message || "Could not find verification code on your LeetCode profile. Please ensure it is saved in your About Me section.",
+        body: err instanceof Error ? err.message : "Could not find verification code on your LeetCode profile. Please ensure it is saved in your About Me section.",
         tone: "bad",
       });
     } finally {
@@ -150,10 +150,10 @@ function LinkAccountPanel() {
         tone: "info",
       });
       await loadLeaderboard();
-    } catch (err: any) {
+    } catch (err: unknown) {
       pushToast({
         label: "Error",
-        body: err.message || "Failed to disconnect account.",
+        body: err instanceof Error ? err.message : "Failed to disconnect account.",
         tone: "bad",
       });
     }
@@ -423,7 +423,7 @@ function Leaderboard() {
     loadLeaderboard({ scope });
   }, [loadLeaderboard, scope]);
 
-  const myRank = leaderboard.findIndex((e: any) => e.userId === me) + 1;
+  const myRank = leaderboard.findIndex((e: import('@/client/types').LeaderboardEntry) => e.userId === me) + 1;
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -436,7 +436,7 @@ function Leaderboard() {
           <div className="flex items-center gap-2">
             <Select
               value={scope}
-              onChange={(e) => setScope(e.target.value as any)}
+              onChange={(e) => setScope(e.target.value as "global" | "college" | "batch")}
               className="w-36"
             >
               <option value="global">Global</option>
@@ -509,7 +509,7 @@ function Leaderboard() {
                   No data yet for this scope. Link your GitHub or LeetCode above to get started.
                 </div>
               ) : (
-                leaderboard.map((entry: any) => {
+                leaderboard.map((entry: import('@/client/types').LeaderboardEntry) => {
                   const isMe = entry.userId === me;
                   const top3 = entry.rank <= 3;
                   return (

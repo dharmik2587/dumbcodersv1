@@ -37,9 +37,9 @@ export async function POST(request: NextRequest) {
     return Response.json({ success: false, error: 'RATE_LIMITED', message: 'Too many connection attempts. Please wait a moment.' }, { status: 429 });
   }
 
-  let body: any;
+  let body: { username?: string } | null = null;
   try {
-    body = await request.json();
+    body = (await request.json()) as { username?: string };
   } catch {
     return Response.json({ success: false, error: 'INVALID_BODY', message: 'Request body must be JSON.' }, { status: 400 });
   }
@@ -78,11 +78,11 @@ export async function POST(request: NextRequest) {
     let profile;
     try {
       profile = await fetchLeetcodePublicProfile(cleanUsername);
-    } catch (e: any) {
+    } catch (e: unknown) {
       return Response.json({
         success: false,
         error: 'LEETCODE_UNAVAILABLE',
-        message: `Unable to connect to LeetCode: ${e.message || 'Service unreachable'}`,
+        message: `Unable to connect to LeetCode: ${e instanceof Error ? e.message : 'Service unreachable'}`,
       }, { status: 502 });
     }
 
@@ -155,12 +155,12 @@ export async function POST(request: NextRequest) {
       expires_at: expiresAt.toISOString(),
       message: 'Add this code to your public LeetCode profile and then verify.',
     }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('LeetCode connect error:', error);
     return Response.json({
       success: false,
       error: 'SERVER_ERROR',
-      message: error.message || 'An internal error occurred.',
+      message: error instanceof Error ? error.message : 'An internal error occurred.',
     }, { status: 500 });
   }
 }

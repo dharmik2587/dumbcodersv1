@@ -128,12 +128,12 @@ export async function GET() {
       },
       synced_at: now.toISOString(),
     }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('LeetCode stats error:', error);
     return Response.json({
       success: false,
       error: 'SERVER_ERROR',
-      message: error.message || 'Failed to retrieve LeetCode statistics.',
+      message: error instanceof Error ? error.message : 'Failed to retrieve LeetCode statistics.',
     }, { status: 500 });
   }
 }

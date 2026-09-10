@@ -6,6 +6,7 @@ import { getTeamById, isTeamMember } from '@/lib/db/queries/teams';
 import { teams } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
 import { updateTeamSchema } from '@/lib/validations/team';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -20,6 +21,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   let userId: string;
   try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
+
+  const rl = await enforceRateLimit(`teams-mod:${userId}`, 20, 60);
+  if (!rl.success && rl.response) return rl.response;
+
   const teamId = (await params).id;
   const team = await getTeamById(teamId);
   if (!team) return failure('NOT_FOUND', 'Team not found.', 404);
@@ -35,6 +40,10 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
   let userId: string;
   try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
+
+  const rl = await enforceRateLimit(`teams-mod:${userId}`, 10, 60);
+  if (!rl.success && rl.response) return rl.response;
+
   const teamId = (await params).id;
   const team = await getTeamById(teamId);
   if (!team) return failure('NOT_FOUND', 'Team not found.', 404);

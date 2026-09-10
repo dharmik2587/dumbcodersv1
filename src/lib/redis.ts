@@ -25,13 +25,13 @@ export function hasRedis(): boolean {
   return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
 }
 
-export function createRatelimit(requests = 20, window = '60 s') {
+export function createRatelimit(requests = 20, window: Parameters<typeof Ratelimit.slidingWindow>[1] = '60 s') {
   const redis = getRedis();
   if (!redis) return null;
 
   return new Ratelimit({
     redis,
-    limiter: Ratelimit.slidingWindow(requests, window as any),
+    limiter: Ratelimit.slidingWindow(requests, window),
     analytics: true,
     prefix: '@hackmate/ratelimit',
   });

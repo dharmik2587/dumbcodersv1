@@ -25,7 +25,7 @@ export function getPusherServer(): Pusher | null {
   return pusherInstance;
 }
 
-export async function triggerPusherEvent(channel: string, event: string, data: any) {
+export async function triggerPusherEvent(channel: string, event: string, data: unknown) {
   const pusher = getPusherServer();
   if (!pusher) {
     console.warn(`[Pusher] Skipped event "${event}" on "${channel}" — Pusher not configured`);

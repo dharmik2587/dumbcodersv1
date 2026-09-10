@@ -4,6 +4,7 @@ import { requireUserId } from '@/lib/auth/server';
 import { getCoreDb, hasCoreDatabase } from '@/lib/db/core';
 import { hackathonBookmarks, hackathons } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -11,6 +12,9 @@ async function toggle(request: NextRequest, id: string, remove: boolean) {
   let userId: string;
   try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
+
+  const rl = await enforceRateLimit(`bookmark:${userId}`, 30, 60);
+  if (!rl.success && rl.response) return rl.response;
 
   const db = getCoreDb();
   const event = await db.select({ id: hackathons.id }).from(hackathons).where(eq(hackathons.id, id)).limit(1);

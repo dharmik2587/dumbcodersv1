@@ -43,7 +43,8 @@ function Calendar() {
     const map: Record<number, typeof hackathons> = {};
     hackathons.forEach((h) => {
       if (onlySaved && !bookmarks.includes(h.id)) return;
-      const dStr = (h as any).registrationDeadlineAt || (h as any).registerDeadline;
+      const hObj = h as { registrationDeadlineAt?: string; registerDeadline?: string };
+      const dStr = hObj.registrationDeadlineAt || hObj.registerDeadline;
       if (!dStr) return;
       const d = new Date(dStr);
       if (d.getFullYear() !== year || d.getMonth() !== month) return;
@@ -137,7 +138,7 @@ function Calendar() {
                       <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full ring-2 ring-accent" />
                     )}
                     <span className="mt-2 flex flex-col gap-1">
-                      {events.slice(0, 3).map((e: any) => {
+                      {events.slice(0, 3).map((e: import('@/client/types').Hackathon) => {
                         const isBookmarked = bookmarks.includes(e.id);
                         return (
                           <span
@@ -185,7 +186,7 @@ function Calendar() {
                 </p>
               ) : (
                 <div className="divide-y divide-line">
-                  {dayEvents.map((h: any) => {
+                  {dayEvents.map((h: import('@/client/types').Hackathon) => {
                     const d = daysLeft(h);
                     const isBookmarked = bookmarks.includes(h.id);
                     return (

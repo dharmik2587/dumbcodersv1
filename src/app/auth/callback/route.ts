@@ -3,13 +3,22 @@ import { createClient } from '@/lib/supabase/server';
 import { hasCoreDatabase } from '@/lib/db/core';
 import { ensureStudentProfile } from '@/lib/profile/student';
 
+import { type EmailOtpType } from '@supabase/supabase-js';
+
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');
+  const tokenHash = searchParams.get('token_hash');
+  const type = searchParams.get('type') as EmailOtpType | null;
   const error = searchParams.get('error');
   const errorDescription = searchParams.get('error_description');
   // if "next" is in param, use it as the redirect URL
-  const next = searchParams.get('next') ?? '/discover';
+  let next = searchParams.get('next') ?? '/discover';
+
+  // If this was a password recovery email, route to reset-password
+  if (type === 'recovery') {
+    next = '/reset-password';
+  }
 
   // Supabase may redirect back with an error (e.g. user denied consent)
   if (error) {
@@ -19,29 +28,44 @@ export async function GET(request: Request) {
     );
   }
 
-  if (!code) {
-    console.error('Auth callback: no code parameter in URL. Full URL:', request.url);
+  const supabase = await createClient();
+
+  let user = null;
+
+  if (tokenHash && type) {
+    const { data, error: verifyError } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type,
+    });
+    if (verifyError) {
+      console.error('Auth callback: verifyOtp failed:', verifyError.message);
+      return NextResponse.redirect(
+        `${origin}/sign-in?error=${encodeURIComponent(verifyError.message)}`
+      );
+    }
+    user = data.user;
+  } else if (code) {
+    const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+    if (exchangeError) {
+      console.error('Auth callback: exchangeCodeForSession failed:', exchangeError.message);
+      return NextResponse.redirect(
+        `${origin}/sign-in?error=${encodeURIComponent(exchangeError.message)}`
+      );
+    }
+    user = data.user;
+  } else {
+    console.error('Auth callback: neither code nor token_hash parameter in URL. Full URL:', request.url);
     return NextResponse.redirect(`${origin}/sign-in?error=auth_callback_failed`);
   }
 
-  const supabase = await createClient();
-  const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-
-  if (exchangeError) {
-    console.error('Auth callback: exchangeCodeForSession failed:', exchangeError.message, exchangeError);
-    return NextResponse.redirect(
-      `${origin}/sign-in?error=${encodeURIComponent(exchangeError.message)}`
-    );
-  }
-
-  if (!data.user) {
-    console.error('Auth callback: exchangeCodeForSession returned no user');
+  if (!user) {
+    console.error('Auth callback returned no user');
     return NextResponse.redirect(`${origin}/sign-in?error=auth_callback_failed`);
   }
 
   if (hasCoreDatabase()) {
     try {
-      await ensureStudentProfile(data.user);
+      await ensureStudentProfile(user);
     } catch (e) {
       console.error('Failed to auto-provision Neon student profile on callback:', e);
     }

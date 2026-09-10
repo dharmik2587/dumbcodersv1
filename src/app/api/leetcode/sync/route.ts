@@ -119,12 +119,12 @@ export async function POST() {
       synced_at: now.toISOString(),
       message: 'LeetCode statistics synchronized successfully.',
     }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('LeetCode sync error:', error);
     return Response.json({
       success: false,
       error: 'SERVER_ERROR',
-      message: error.message || 'Failed to sync LeetCode statistics.',
+      message: error instanceof Error ? error.message : 'Failed to sync LeetCode statistics.',
     }, { status: 500 });
   }
 }

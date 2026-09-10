@@ -41,8 +41,8 @@ export async function GET(request: NextRequest) {
       const db = getCoreDb();
       await db.execute(sql`SELECT 1`);
       checks.database = { status: 'PASS', http_code: 200 };
-    } catch (e: any) {
-      checks.database = { status: 'FAIL', http_code: 500, error: e.message };
+    } catch (e: unknown) {
+      checks.database = { status: 'FAIL', http_code: 500, error: e instanceof Error ? e.message : 'Database query failed' };
       overallHealthy = false;
     }
   }
@@ -53,8 +53,8 @@ export async function GET(request: NextRequest) {
       const db = getCoreDb();
       await db.execute(sql`SELECT count(*) FROM connected_accounts LIMIT 1`);
       checks.account_table = { status: 'PASS', http_code: 200 };
-    } catch (e: any) {
-      checks.account_table = { status: 'FAIL', http_code: 500, error: e.message };
+    } catch (e: unknown) {
+      checks.account_table = { status: 'FAIL', http_code: 500, error: e instanceof Error ? e.message : 'Table check failed' };
       overallHealthy = false;
     }
   } else {
@@ -70,8 +70,8 @@ export async function GET(request: NextRequest) {
       checks.code_generation = { status: 'FAIL', http_code: 500, error: 'Generated code format is invalid' };
       overallHealthy = false;
     }
-  } catch (e: any) {
-    checks.code_generation = { status: 'FAIL', http_code: 500, error: e.message };
+  } catch (e: unknown) {
+    checks.code_generation = { status: 'FAIL', http_code: 500, error: e instanceof Error ? e.message : 'Code generation error' };
     overallHealthy = false;
   }
 
@@ -85,13 +85,13 @@ export async function GET(request: NextRequest) {
       checks.username_validation = { status: 'FAIL', http_code: 500, error: 'Validation logic produced unexpected results' };
       overallHealthy = false;
     }
-  } catch (e: any) {
-    checks.username_validation = { status: 'FAIL', http_code: 500, error: e.message };
+  } catch (e: unknown) {
+    checks.username_validation = { status: 'FAIL', http_code: 500, error: e instanceof Error ? e.message : 'Validation error' };
     overallHealthy = false;
   }
 
   // 5. Public LeetCode profile request check
-  let profileSample: any = null;
+  let profileSample: { username?: string } | null = null;
   try {
     profileSample = await fetchLeetcodePublicProfile('tourist');
     if (profileSample && profileSample.username) {
@@ -100,8 +100,8 @@ export async function GET(request: NextRequest) {
       checks.leetcode_profile_request = { status: 'FAIL', http_code: 502, error: 'Could not resolve standard profile' };
       overallHealthy = false;
     }
-  } catch (e: any) {
-    checks.leetcode_profile_request = { status: 'FAIL', http_code: 503, error: e.message || 'LeetCode API unreachable' };
+  } catch (e: unknown) {
+    checks.leetcode_profile_request = { status: 'FAIL', http_code: 503, error: e instanceof Error ? e.message : 'LeetCode API unreachable' };
     overallHealthy = false;
   }
 
@@ -117,8 +117,8 @@ export async function GET(request: NextRequest) {
       checks.profile_parser = { status: 'FAIL', http_code: 500, error: 'Profile parser failed to map fields' };
       overallHealthy = false;
     }
-  } catch (e: any) {
-    checks.profile_parser = { status: 'FAIL', http_code: 500, error: e.message };
+  } catch (e: unknown) {
+    checks.profile_parser = { status: 'FAIL', http_code: 500, error: e instanceof Error ? e.message : 'Parser error' };
     overallHealthy = false;
   }
 
@@ -136,8 +136,8 @@ export async function GET(request: NextRequest) {
       checks.verification = { status: 'FAIL', http_code: 500, error: 'Code detection logic failed' };
       overallHealthy = false;
     }
-  } catch (e: any) {
-    checks.verification = { status: 'FAIL', http_code: 500, error: e.message };
+  } catch (e: unknown) {
+    checks.verification = { status: 'FAIL', http_code: 500, error: e instanceof Error ? e.message : 'Verification check error' };
     overallHealthy = false;
   }
 
@@ -150,8 +150,8 @@ export async function GET(request: NextRequest) {
       checks.stats = { status: 'FAIL', http_code: 502, error: 'Failed to retrieve stats for sample user' };
       overallHealthy = false;
     }
-  } catch (e: any) {
-    checks.stats = { status: 'FAIL', http_code: 503, error: e.message || 'Stats retrieval error' };
+  } catch (e: unknown) {
+    checks.stats = { status: 'FAIL', http_code: 503, error: e instanceof Error ? e.message : 'Stats retrieval error' };
     overallHealthy = false;
   }
 

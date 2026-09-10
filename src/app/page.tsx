@@ -118,7 +118,7 @@ function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-function LandingNav({ user }: { user: any }) {
+function LandingNav({ user }: { user: import('@supabase/supabase-js').User | null }) {
   const links = [
     ["Matching", "#matching"],
     ["Hackathons", "#discovery"],
@@ -171,7 +171,7 @@ function LandingNav({ user }: { user: any }) {
 }
 
 /* ------------------------------------------------------------------ */
-function Hero({ user }: { user: any }) {
+function Hero({ user }: { user: import('@supabase/supabase-js').User | null }) {
   return (
     <section id="top" className="relative overflow-hidden pt-16 md:pt-24">
       <div className="tech-cols pointer-events-none absolute inset-0" aria-hidden />
@@ -361,7 +361,7 @@ function Hero({ user }: { user: any }) {
 }
 
 /* ------------------------------------------------------------------ */
-function PlatformStrip({ hackathons }: { hackathons: any[] }) {
+function PlatformStrip({ hackathons }: { hackathons: import('@/client/types').Hackathon[] }) {
   const now = new Date();
   const rail = (hackathons.length > 0 ? hackathons.slice(0, 8) : HACKATHONS.slice(0, 8)).map(
     (h) => {

@@ -164,7 +164,7 @@ function TeamsIndex() {
                   <div className="mt-4 border-t border-line/60 pt-3">
                     <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-fg3">Roster ({(t.members ?? []).length}/{t.maxMembers ?? 4}):</span>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {(t.members ?? []).map((m: any, mIdx: number) => {
+                      {(t.members ?? []).map((m: { builderId: string; name?: string; username?: string; role?: string }, mIdx: number) => {
                         const memberBuilder = byId.get(m.builderId);
                         const displayName = m.name || memberBuilder?.name || (m.username ? `@${m.username}` : `Member ${mIdx + 1}`);
                         const isLeader = m.builderId === t.leaderId || m.role === 'leader';
@@ -337,7 +337,7 @@ function TeamWorkspace() {
   const hack = hackathons.find((h) => h.id === team?.hackathonId);
   const project = projects.find((p) => p.id === team?.project);
   // pending requests for this team using real DB field names
-  const pending = requests.filter((r: any) => {
+  const pending = requests.filter((r: { request?: { teamId?: string; status?: string }; teamId?: string; status?: string }) => {
     const req = r.request ?? r;
     return req.teamId === team?.id && req.status === "pending";
   });
@@ -540,10 +540,11 @@ function TeamWorkspace() {
                 <p className="px-5 py-4 text-[12.5px] text-fg2">Nothing waiting. Coverage is what it is.</p>
               ) : (
                 <div className="divide-y divide-line">
-                  {pending.slice(0, 3).map((r: any) => {
+                  {pending.slice(0, 3).map((r: { request?: { id: string; fromUserId: string; role?: string; roleOffered?: string }; id?: string; fromUserId?: string; role?: string; roleOffered?: string; from?: { id: string; fullName?: string; username?: string; avatarUrl?: string } }) => {
                     const req = r.request ?? r;
                     const fromProfile = r.from ?? null;
-                    const b = byId.get(req.fromUserId) ?? (fromProfile ? {
+                    const fromUserId = req.fromUserId || '';
+                    const b = (fromUserId ? byId.get(fromUserId) : null) ?? (fromProfile ? {
                       id: fromProfile.id,
                       name: fromProfile.fullName ?? fromProfile.username ?? "Unknown",
                       handle: fromProfile.username ?? "",
@@ -551,12 +552,13 @@ function TeamWorkspace() {
                       initials: (fromProfile.fullName ?? "?").slice(0, 2).toUpperCase(),
                       skills: [],
                     } : null);
+                    const roleText = req.roleOffered || req.role || "—";
                     return (
-                      <div key={req.id} className="flex items-center gap-3 px-5 py-3">
-                        {b && <Avatar b={b as any} size={26} />}
+                      <div key={req.id ?? Math.random()} className="flex items-center gap-3 px-5 py-3">
+                        {b && <Avatar b={b as unknown as import('@/client/types').Builder} size={26} />}
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-[12.5px] text-fg">{b?.name ?? "Unknown"}</div>
-                          <div className="font-mono text-[10px] text-fg3">{req.roleOffered ?? "—"}</div>
+                          <div className="font-mono text-[10px] text-fg3">{roleText}</div>
                         </div>
                         <Link href="/requests">
                           <Button size="sm" variant="outline">Review</Button>

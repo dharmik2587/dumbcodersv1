@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import * as api from '../lib/api';
 import * as auth from '../lib/auth';
 import * as requestsApi from '../lib/api/requests';
-import type { Builder, Hackathon, Team, Notification, CollabRequest, Project } from '../types';
+import type { Builder, Hackathon, Team, Notification, CollabRequest, Project, RoleKey } from '../types';
 
 export type Toast = {
   id: number;
@@ -15,13 +15,15 @@ export type Toast = {
 
 import { CLUSTERS } from '../data/seed';
 
-export function mapProfileToBuilder(profile: any): Builder {
-  if (!profile) return null as any;
-  const name = profile.fullName || profile.username || 'Builder';
+export function mapProfileToBuilder(profile: Record<string, unknown> | null | undefined): Builder {
+  if (!profile) return null as unknown as Builder;
+  const rawFullName = typeof profile.fullName === 'string' ? profile.fullName : '';
+  const rawUsername = typeof profile.username === 'string' ? profile.username : '';
+  const name = rawFullName || rawUsername || 'Builder';
   const initials = name.split(' ').filter(Boolean).map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'B';
   
   // Map skills to taxonomy clusters
-  const rawSkills: string[] = Array.isArray(profile.skills) ? profile.skills : [];
+  const rawSkills: string[] = Array.isArray(profile.skills) ? (profile.skills as string[]) : [];
   const skills = rawSkills.map((s: string) => {
     const meta = CLUSTERS.find(
       (c) => c.label.toLowerCase() === s.toLowerCase() || c.label.toLowerCase().replace(/[^a-z]+/g, '-') === s.toLowerCase()
@@ -55,30 +57,45 @@ export function mapProfileToBuilder(profile: any): Builder {
 
   const weeklyHours = availability.reduce((acc, slot) => acc + (slot.end - slot.start), 0) || 16;
 
+  const collegeObj = profile.college as { shortName?: string; name?: string } | string | undefined;
+  const collegeStr = typeof collegeObj === 'object' && collegeObj !== null
+    ? (collegeObj.shortName || collegeObj.name || 'Engineering College')
+    : (typeof collegeObj === 'string' ? collegeObj : 'Engineering College');
+
+  const gradYear = typeof profile.graduationYear === 'number' ? profile.graduationYear : undefined;
+  const yearNum = gradYear ? (gradYear - 2026 + 1) : 3;
+
+  const validRoles: RoleKey[] = ['frontend', 'backend', 'ml', 'design', 'product', 'mobile', 'devops'];
+  const prefRole = typeof profile.rolePreference === 'string' ? profile.rolePreference.toLowerCase() : 'frontend';
+  const role: RoleKey = validRoles.includes(prefRole as RoleKey) ? (prefRole as RoleKey) : 'frontend';
+
+  const gh = profile.github as { topRepos?: { name: string; lang: string; stars: number; url: string }[] } | undefined;
+  const repos = Array.isArray(gh?.topRepos) ? gh.topRepos : [];
+
   return {
-    id: profile.id,
-    studentCode: profile.studentCode,
-    handle: profile.username || '',
+    id: typeof profile.id === 'string' ? profile.id : String(profile.id || ''),
+    studentCode: typeof profile.studentCode === 'string' ? profile.studentCode : undefined,
+    handle: rawUsername,
     name,
     initials,
-    college: profile.college?.shortName || profile.college?.name || profile.college || 'Engineering College',
-    year: profile.graduationYear ? (profile.graduationYear - 2026 + 1) : 3,
-    branch: profile.branch || 'Computer Science',
-    city: profile.city || 'Campus',
-    role: (profile.rolePreference || 'frontend') as any,
+    college: collegeStr,
+    year: yearNum,
+    branch: typeof profile.branch === 'string' ? profile.branch : 'Computer Science',
+    city: typeof profile.city === 'string' ? profile.city : 'Campus',
+    role,
     secondary: [],
-    avatarUrl: profile.avatarUrl,
+    avatarUrl: typeof profile.avatarUrl === 'string' ? profile.avatarUrl : undefined,
     goal: 'win',
-    bio: profile.bio || '',
+    bio: typeof profile.bio === 'string' ? profile.bio : '',
     skills,
-    repos: profile.github?.topRepos || [],
+    repos,
     projects: [],
     events: [],
     availability,
     weeklyHours,
     openToTeams: profile.isOpenToTeam !== false,
     verified: true,
-    lastActive: profile.updatedAt || new Date().toISOString(),
+    lastActive: typeof profile.updatedAt === 'string' ? profile.updatedAt : (profile.updatedAt instanceof Date ? profile.updatedAt.toISOString() : new Date().toISOString()),
   };
 }
 
@@ -90,7 +107,10 @@ export type LeaderboardEntry = {
   avatarUrl?: string;
   studentCode?: string;
   college?: string;
+  githubUsername?: string;
+  leetcodeUsername?: string;
   githubScore: number;
+  leetcodeScore: number;
   participationScore: number;
   resultScore: number;
   composite: number;
@@ -107,7 +127,7 @@ type State = {
   teams: Team[];
   builders: Builder[];
   projects: Project[];
-  requests: any[];
+  requests: CollabRequest[];
   notifications: Notification[];
   bookmarks: string[];
   activeTeamId: string | null;
@@ -123,16 +143,16 @@ type State = {
   signInWithOAuth: (provider: 'github' | 'google', redirectTo?: string) => Promise<void>;
   signUp: (email: string, password: string, metadata?: Record<string, string>) => Promise<void>;
   signOut: () => Promise<void>;
-  updateProfile: (data: Record<string, any>) => Promise<any>;
-  loadHackathons: (params?: any) => Promise<void>;
+  updateProfile: (data: Record<string, unknown>) => Promise<unknown>;
+  loadHackathons: (params?: Record<string, unknown>) => Promise<void>;
   refreshHackathons: () => Promise<void>;
   loadTeams: () => Promise<void>;
-  loadBuilders: (params?: any) => Promise<void>;
+  loadBuilders: (params?: Record<string, unknown>) => Promise<void>;
   loadUser: () => Promise<void>;
   loadRequests: (direction?: 'sent' | 'received' | 'all') => Promise<void>;
   loadLeaderboard: (params?: { scope?: 'global' | 'college' | 'batch'; window?: 'week' | 'month' | 'all' }) => Promise<void>;
   submitPlatformUsername: (platform: 'leetcode' | 'github', username: string) => Promise<boolean>;
-  createTeam: (data: any) => Promise<string | null>;
+  createTeam: (data: { name: string; hackathonId?: string; description?: string; maxMembers?: number; rolesNeeded?: string[]; isOpen?: boolean; [key: string]: unknown }) => Promise<string | null>;
   setActiveTeam: (id: string | null) => void;
   toggleBookmark: (id: string) => Promise<void>;
   sendRequest: (data: { toUserId: string; teamId?: string | null; hackathonId?: string | null; message?: string; roleOffered?: string }) => Promise<void>;
@@ -141,6 +161,7 @@ type State = {
   withdrawRequest: (id: string) => Promise<void>;
   pushToast: (t: Omit<Toast, 'id'>) => void;
   dismissToast: (id: number) => void;
+  _mapAuthUserToBuilder: (u: { id: string; email?: string; user_metadata?: Record<string, unknown> }) => Builder;
 };
 
 let toastSeq = 1;
@@ -165,8 +186,8 @@ export const useApiStore = create<State>()(
       toasts: [],
 
       // Helper to build initial Builder from Supabase user
-      _mapAuthUserToBuilder: (u: any): Builder => {
-        const meta = u.user_metadata || {};
+      _mapAuthUserToBuilder: (u: { id: string; email?: string; user_metadata?: Record<string, unknown> }): Builder => {
+        const meta = (u.user_metadata || {}) as Record<string, string>;
         const name = meta.full_name || meta.name || u.email?.split('@')[0] || 'Builder';
         const initials = name.split(' ').filter(Boolean).map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() || 'B';
         return {
@@ -202,7 +223,7 @@ export const useApiStore = create<State>()(
           const authState = await auth.getCurrentAuthState();
           if (authState.user) {
             // Always set fresh data from Supabase user first
-            const initialBuilder = (get() as any)._mapAuthUserToBuilder(authState.user);
+            const initialBuilder = get()._mapAuthUserToBuilder(authState.user);
             set({
               isAuthenticated: true,
               isLoading: false,
@@ -227,7 +248,7 @@ export const useApiStore = create<State>()(
         // Listen for auth state changes (handles OAuth callback, tab sync, etc.)
         auth.onAuthStateChange(async (event, session) => {
           if (event === 'SIGNED_IN' && session?.user) {
-            const builder = (get() as any)._mapAuthUserToBuilder(session.user);
+            const builder = get()._mapAuthUserToBuilder(session.user);
             set({ isAuthenticated: true, isLoading: false, me: builder });
             try {
               await get().loadUser();
@@ -263,7 +284,7 @@ export const useApiStore = create<State>()(
           if (authState.user) {
             set({
               isAuthenticated: true,
-              me: (get() as any)._mapAuthUserToBuilder(authState.user),
+              me: get()._mapAuthUserToBuilder(authState.user),
             });
             await get().loadUser();
             await get().loadTeams();
@@ -292,7 +313,7 @@ export const useApiStore = create<State>()(
           if (authState.user) {
             set({
               isAuthenticated: true,
-              me: (get() as any)._mapAuthUserToBuilder(authState.user),
+              me: get()._mapAuthUserToBuilder(authState.user),
             });
             await get().loadUser();
             await get().loadTeams();
@@ -366,8 +387,9 @@ export const useApiStore = create<State>()(
       updateProfile: async (data: Record<string, any>) => {
         try {
           const updated = await api.updateCurrentUser(data);
+          const mappedBuilder = mapProfileToBuilder(updated);
           set((s) => ({
-            me: s.me ? { ...s.me, ...updated } : updated,
+            me: s.me ? { ...s.me, ...mappedBuilder } : mappedBuilder,
           }));
           get().pushToast({
             label: 'Profile saved',
@@ -415,40 +437,48 @@ export const useApiStore = create<State>()(
         try {
           const rawTeams = await api.listMyTeams();
           // rawTeams is an array of { team, membership } from the DB
-          const mappedTeams = (rawTeams || []).map((row: any) => {
-            const t = row.team ?? row;
+          const mappedTeams: Team[] = (rawTeams || []).map((row) => {
+            const t = row.team;
             const membership = row.membership;
+            const openSlots = ((t.rolesNeeded ?? []) as string[]).map((r) => ({
+              role: (['frontend', 'backend', 'ml', 'design', 'product', 'mobile', 'devops'].includes(r) ? r : 'backend') as RoleKey,
+              note: '',
+            }));
+            const members = (t.members && t.members.length > 0)
+              ? t.members.map((m) => ({
+                  builderId: m.builderId,
+                  role: m.role,
+                  joinedAt: m.joinedAt,
+                }))
+              : (membership?.userId || t.leaderId ? [{
+                  builderId: membership?.userId || t.leaderId || '',
+                  role: (membership?.role === 'leader' ? 'backend' : (membership?.role || 'backend')) as RoleKey,
+                  joinedAt: (membership?.joinedAt || (typeof t.createdAt === 'string' ? t.createdAt : new Date().toISOString())) as string,
+                }] : []);
+
             return {
               id: t.id,
               name: t.name,
-              description: t.description,
-              hackathonId: t.hackathonId,
-              leaderId: t.leaderId,
-              ownerId: t.leaderId,
+              description: t.description ?? undefined,
+              hackathonId: t.hackathonId ?? '',
+              leaderId: t.leaderId ?? undefined,
+              ownerId: t.leaderId ?? '',
               maxMembers: t.maxMembers ?? 4,
               rolesNeeded: t.rolesNeeded ?? [],
               isOpen: t.isOpen ?? true,
               status: t.status ?? 'forming',
-              projectName: t.projectName,
-              projectUrl: t.projectUrl,
-              demoUrl: t.demoUrl,
-              createdAt: t.createdAt,
-              updatedAt: t.updatedAt,
-              members: (t.members && t.members.length > 0)
-                ? t.members
-                : (membership?.userId || t.leaderId ? [{
-                    builderId: membership?.userId || t.leaderId,
-                    role: (membership?.role === 'leader' ? 'backend' : (membership?.role || 'backend')) as any,
-                    joinedAt: membership?.joinedAt || t.createdAt || new Date().toISOString(),
-                  }] : []),
-              openSlots: (t.rolesNeeded ?? []).map((role: string) => ({ role, note: '' })),
-              visibility: t.isOpen ? 'discoverable' : 'private',
-              project: t.projectName ?? null,
-              hackathonCode: '',
-              myRole: membership?.role ?? 'member',
+              projectName: t.projectName ?? undefined,
+              projectUrl: t.projectUrl ?? undefined,
+              demoUrl: t.demoUrl ?? undefined,
+              createdAt: typeof t.createdAt === 'string' ? t.createdAt : undefined,
+              updatedAt: typeof t.updatedAt === 'string' ? t.updatedAt : undefined,
+              members,
+              openSlots,
+              visibility: (t.isOpen ? 'discoverable' : 'private') as 'discoverable' | 'private',
+              project: (t.projectName ?? undefined) as string | undefined,
             };
           });
-          set({ teams: mappedTeams as any[] });
+          set({ teams: mappedTeams });
           if (mappedTeams.length > 0 && !get().activeTeamId) {
             set({ activeTeamId: mappedTeams[0].id });
           }
@@ -461,7 +491,7 @@ export const useApiStore = create<State>()(
       loadBuilders: async (params) => {
         try {
           const response = await api.searchPartners(params);
-          set({ builders: (response.data || []).map(mapProfileToBuilder) });
+          set({ builders: (response.data || []).map((p) => mapProfileToBuilder(p as Record<string, unknown>)) });
         } catch (error) {
           console.error('Failed to load builders:', error);
         }
@@ -498,11 +528,11 @@ export const useApiStore = create<State>()(
           // Refresh leaderboard to show updated scores
           await get().loadLeaderboard();
           return true;
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to submit platform username:', error);
           get().pushToast({
             label: 'Error',
-            body: error?.message || `Could not link ${platform} account.`,
+            body: error instanceof Error ? error.message : `Could not link ${platform} account.`,
             tone: 'bad',
           });
           return false;
@@ -536,7 +566,7 @@ export const useApiStore = create<State>()(
       loadRequests: async (direction = 'all') => {
         try {
           const data = await requestsApi.listRequests(direction);
-          set({ requests: data || [] });
+          set({ requests: (data || []) as unknown as CollabRequest[] });
         } catch (error) {
           console.error('Failed to load requests:', error);
         }
@@ -548,9 +578,9 @@ export const useApiStore = create<State>()(
           await requestsApi.sendCollabRequest(data);
           await get().loadRequests();
           get().pushToast({ label: 'Request sent', body: 'Your collaboration request was delivered.', tone: 'good' });
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to send request:', error);
-          get().pushToast({ label: 'Error', body: error?.message || 'Could not send request.', tone: 'bad' });
+          get().pushToast({ label: 'Error', body: error instanceof Error ? error.message : 'Could not send request.', tone: 'bad' });
           throw error;
         }
       },
@@ -562,9 +592,9 @@ export const useApiStore = create<State>()(
           await get().loadRequests();
           await get().loadTeams();
           get().pushToast({ label: 'Accepted', body: 'They have been added to the team.', tone: 'good' });
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to accept request:', error);
-          get().pushToast({ label: 'Error', body: error?.message || 'Could not accept request.', tone: 'bad' });
+          get().pushToast({ label: 'Error', body: error instanceof Error ? error.message : 'Could not accept request.', tone: 'bad' });
         }
       },
 
@@ -574,9 +604,9 @@ export const useApiStore = create<State>()(
           await requestsApi.rejectRequest(id);
           await get().loadRequests();
           get().pushToast({ label: 'Declined', body: 'Request declined.', tone: 'info' });
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to reject request:', error);
-          get().pushToast({ label: 'Error', body: error?.message || 'Could not decline request.', tone: 'bad' });
+          get().pushToast({ label: 'Error', body: error instanceof Error ? error.message : 'Could not decline request.', tone: 'bad' });
         }
       },
 
@@ -586,9 +616,9 @@ export const useApiStore = create<State>()(
           await requestsApi.withdrawRequest(id);
           await get().loadRequests();
           get().pushToast({ label: 'Withdrawn', body: 'Your request has been withdrawn.', tone: 'info' });
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error('Failed to withdraw request:', error);
-          get().pushToast({ label: 'Error', body: error?.message || 'Could not withdraw request.', tone: 'bad' });
+          get().pushToast({ label: 'Error', body: error instanceof Error ? error.message : 'Could not withdraw request.', tone: 'bad' });
         }
       },
 

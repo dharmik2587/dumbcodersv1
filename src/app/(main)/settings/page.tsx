@@ -35,7 +35,7 @@ function Leaderboard() {
     loadLeaderboard({ scope });
   }, [loadLeaderboard, scope]);
 
-  const myRank = leaderboard.findIndex((e: any) => e.userId === me) + 1;
+  const myRank = leaderboard.findIndex((e: import('@/client/types').LeaderboardEntry) => e.userId === me) + 1;
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -48,7 +48,7 @@ function Leaderboard() {
           <div className="flex items-center gap-2">
             <Select
               value={scope}
-              onChange={(e) => setScope(e.target.value as any)}
+              onChange={(e) => setScope(e.target.value as "global" | "college" | "batch")}
               className="w-36"
             >
               <option value="global">Global</option>
@@ -107,7 +107,7 @@ function Leaderboard() {
                   No data yet for this scope.
                 </div>
               ) : (
-                leaderboard.map((entry: any) => {
+                leaderboard.map((entry: import('@/client/types').LeaderboardEntry) => {
                   const isMe = entry.userId === me;
                   const top3 = entry.rank <= 3;
                   return (
@@ -204,7 +204,7 @@ function Calendar() {
     const map: Record<number, typeof hackathons> = {};
     hackathons.forEach((h) => {
       if (onlySaved && !bookmarks.includes(h.id)) return;
-      const d = new Date((h as any).registerDeadline);
+      const d = new Date(h.registerDeadline);
       if (d.getFullYear() !== year || d.getMonth() !== month) return;
       const k = d.getDate();
       map[k] = [...(map[k] ?? []), h];
@@ -296,7 +296,7 @@ function Calendar() {
                       <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full ring-2 ring-accent" />
                     )}
                     <span className="mt-2 flex flex-col gap-1">
-                      {events.slice(0, 3).map((e: any) => (
+                      {events.slice(0, 3).map((e: import('@/client/types').Hackathon) => (
                         <span
                           key={e.id}
                           className={cn(
@@ -339,7 +339,7 @@ function Calendar() {
                 </p>
               ) : (
                 <div className="divide-y divide-line">
-                  {dayEvents.map((h: any) => {
+                  {dayEvents.map((h: import('@/client/types').Hackathon) => {
                     const d = daysLeft(h);
                     return (
                       <Link

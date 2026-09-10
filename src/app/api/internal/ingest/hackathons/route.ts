@@ -16,7 +16,7 @@ function safeEqual(left: string, right: string) {
 }
 
 function authenticate(request: NextRequest, rawBody: string) {
-  const secret = process.env.N8N_INGEST_SECRET;
+  const secret = process.env.N8N_INGEST_SECRET || process.env.CRON_SECRET;
   if (!secret) return false;
   const provided = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
   const signature = request.headers.get('x-hackmate-signature');

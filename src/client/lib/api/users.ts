@@ -51,7 +51,7 @@ export interface Builder {
 }
 
 export interface PartnerSearchResponse {
-  data: Builder[];
+  data: Record<string, unknown>[];
   meta: {
     page: number;
     pageSize: number;
@@ -84,14 +84,14 @@ export async function searchPartners(params?: {
   return get<ApiResponse<PartnerSearchResponse>>(endpoint).then(res => res.data!);
 }
 
-export async function getCurrentUser(): Promise<any> {
-  return get<ApiResponse<any>>('/api/users/me').then(res => res.data!);
+export async function getCurrentUser(): Promise<Record<string, unknown>> {
+  return get<ApiResponse<Record<string, unknown>>>('/api/users/me').then(res => res.data!);
 }
 
-export async function updateCurrentUser(data: Record<string, any>): Promise<any> {
-  return patch<ApiResponse<any>>('/api/users/me', data).then(res => res.data!);
+export async function updateCurrentUser(data: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return patch<ApiResponse<Record<string, unknown>>>('/api/users/me', data).then(res => res.data!);
 }
 
-export async function getUserProfile(username: string): Promise<any> {
-  return get<ApiResponse<any>>(`/api/users/${username}`).then(res => res.data!);
+export async function getUserProfile(username: string): Promise<Record<string, unknown>> {
+  return get<ApiResponse<Record<string, unknown>>>(`/api/users/${username}`).then(res => res.data!);
 }

@@ -35,8 +35,53 @@ export interface CreateTeamData {
   isOpen?: boolean;
 }
 
-export async function listMyTeams(): Promise<Team[]> {
-  return get<ApiResponse<Team[]>>('/api/teams/my').then(res => res.data!);
+import type { RoleKey } from '../../types';
+
+export type TeamWithMembership = {
+  team: {
+    id: string;
+    name: string;
+    description?: string | null;
+    hackathonId?: string | null;
+    leaderId?: string | null;
+    maxMembers?: number | null;
+    rolesNeeded?: string[] | null;
+    isOpen?: boolean | null;
+    status?: string | null;
+    projectName?: string | null;
+    projectUrl?: string | null;
+    demoUrl?: string | null;
+    createdAt?: string | Date | null;
+    updatedAt?: string | Date | null;
+    members?: Array<{
+      builderId: string;
+      role: RoleKey;
+      joinedAt: string;
+      name?: string;
+      username?: string;
+      avatarUrl?: string | null;
+      studentCode?: string | null;
+    }>;
+  };
+  membership?: {
+    userId?: string;
+    role?: string | null;
+    joinedAt?: string;
+  };
+};
+
+export interface TeamMessage {
+  id: string;
+  content: string;
+  createdAt: string;
+  userId: string;
+  authorName?: string | null;
+  authorUsername?: string | null;
+  authorAvatar?: string | null;
+}
+
+export async function listMyTeams(): Promise<TeamWithMembership[]> {
+  return get<ApiResponse<TeamWithMembership[]>>('/api/teams/my').then(res => res.data || []);
 }
 
 export async function getTeam(id: string): Promise<Team> {
@@ -71,8 +116,8 @@ export async function removeTeamMember(teamId: string, userId: string): Promise<
   return del(`/api/teams/${teamId}/members/${userId}`);
 }
 
-export async function getTeamMessages(teamId: string): Promise<any[]> {
-  return get<ApiResponse<any[]>>(`/api/teams/${teamId}/messages`).then(res => res.data!);
+export async function getTeamMessages(teamId: string): Promise<TeamMessage[]> {
+  return get<ApiResponse<TeamMessage[]>>(`/api/teams/${teamId}/messages`).then(res => res.data!);
 }
 
 export async function sendTeamMessage(teamId: string, content: string): Promise<void> {

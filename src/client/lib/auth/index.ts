@@ -16,7 +16,7 @@ export interface AuthState {
     user_metadata?: {
       full_name?: string;
       avatar_url?: string;
-      [key: string]: any;
+      [key: string]: unknown;
     };
   } | null;
   session: {
@@ -63,7 +63,18 @@ export async function signIn(email: string, password: string) {
     password,
   });
 
-  if (error) throw error;
+  if (error) {
+    if (error.message.toLowerCase().includes('email not confirmed')) {
+      throw new Error('Please check your inbox to confirm your email before signing in.');
+    }
+    throw error;
+  }
+
+  // Double check email_confirmed_at if user returned without active session
+  if (data.user && !data.user.email_confirmed_at && !data.session) {
+    throw new Error('Please check your inbox to confirm your email before signing in.');
+  }
+
   return data;
 }
 
@@ -73,7 +84,38 @@ export async function signUp(email: string, password: string, metadata?: Record<
     password,
     options: {
       data: metadata,
+      emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/auth/callback?next=/onboarding` : undefined,
     },
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function resetPasswordForEmail(email: string) {
+  const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}/reset-password` : undefined;
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo,
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updatePassword(password: string) {
+  const { data, error } = await supabase.auth.updateUser({
+    password,
+  });
+
+  if (error) throw error;
+  return data;
+}
+
+export async function verifyOtp(email: string, token: string) {
+  const { data, error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'signup',
   });
 
   if (error) throw error;
@@ -114,6 +156,8 @@ export async function signOut() {
   if (error) throw error;
 }
 
-export function onAuthStateChange(callback: (event: string, session: any) => void) {
+export function onAuthStateChange(
+  callback: (event: import('@supabase/supabase-js').AuthChangeEvent, session: import('@supabase/supabase-js').Session | null) => void
+) {
   return supabase.auth.onAuthStateChange(callback);
 }

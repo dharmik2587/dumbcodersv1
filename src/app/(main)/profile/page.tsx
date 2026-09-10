@@ -23,6 +23,8 @@ import { ThemedRadar, useChartTokens } from "@/components/charts";
 import { CLUSTER_NAME, CLUSTER_ORDER } from "@/client/data/seed";
 import { cn } from "@/client/utils/cn";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
 export default function Profile() {
   const initialMe = useMe();
   // We use local state for the form draft
@@ -30,9 +32,9 @@ export default function Profile() {
   const pushToast = useApiStore((s) => s.pushToast);
   const updateProfileApi = useApiStore((s) => s.updateProfile);
   const loadUser = useApiStore((s) => s.loadUser);
+  const queryClient = useQueryClient();
   const t = useChartTokens();
   const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [snapshot] = useState(() => JSON.stringify(initialMe));
 
   // Sync state if user data loads after initial mount
@@ -42,35 +44,41 @@ export default function Profile() {
     }
   }, [initialMe, dirty]);
 
+  const profileMutation = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => {
+      return updateProfileApi(payload);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['me'] });
+      await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
+      await loadUser();
+      setDirty(false);
+    },
+    onError: (err: unknown) => {
+      console.error("Profile update error:", err);
+    },
+  });
+
   const patch = (p: Partial<typeof me>) => {
     setMe((prev) => ({ ...prev, ...p }));
     setDirty(true);
   };
 
   const handleSave = async () => {
-    setSaving(true);
     const selectedSkills = me.skills
       .filter((s) => s.level > 0)
       .map((s) => s.label);
 
-    try {
-      await updateProfileApi({
-        fullName: me.name,
-        bio: me.bio || undefined,
-        branch: me.branch || undefined,
-        graduationYear: me.year ? 2026 + (me.year - 1) : undefined,
-        rolePreference: me.role,
-        skills: selectedSkills,
-        isOpenToTeam: me.openToTeams,
-        availability: JSON.stringify(me.availability),
-      });
-      await loadUser();
-    } catch (e) {
-      console.warn("Backend profile sync notice:", e);
-    } finally {
-      setSaving(false);
-      setDirty(false);
-    }
+    await profileMutation.mutateAsync({
+      fullName: me.name,
+      bio: me.bio || undefined,
+      branch: me.branch || undefined,
+      graduationYear: me.year ? 2026 + (me.year - 1) : undefined,
+      rolePreference: me.role,
+      skills: selectedSkills,
+      isOpenToTeam: me.openToTeams,
+      availability: JSON.stringify(me.availability),
+    });
   };
 
   const setSkillLevel = (id: string, level: 0 | 1 | 2 | 3) => {
@@ -124,10 +132,10 @@ export default function Profile() {
             )}
             <Button
               variant={dirty ? "primary" : "outline"}
-              disabled={saving}
+              disabled={profileMutation.isPending}
               onClick={handleSave}
             >
-              <Save size={13} /> {saving ? "Saving..." : dirty ? "Save changes" : "Saved"}
+              <Save size={13} /> {profileMutation.isPending ? "Saving..." : dirty ? "Save changes" : "Saved"}
             </Button>
           </div>
         }

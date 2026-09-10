@@ -7,6 +7,7 @@ import { listMyTeams } from '@/lib/db/queries/teams';
 import { teamMembers, teams } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
 import { createTeamSchema } from '@/lib/validations/team';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -21,6 +22,9 @@ export async function POST(request: NextRequest) {
   let userId: string;
   try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
+
+  const rl = await enforceRateLimit(`teams-create:${userId}`, 10, 60);
+  if (!rl.success && rl.response) return rl.response;
   const parsed = createTeamSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failure('VALIDATION_ERROR', 'Invalid team details.', 400);
   const db = getCoreDb();

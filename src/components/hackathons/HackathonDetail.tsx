@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Bookmark, Heart, ExternalLink, Calendar, MapPin, Trophy, Sparkles, AlertCircle } from 'lucide-react';
 
 type DetailResponse = {
   hackathon: {
@@ -24,53 +25,210 @@ type DetailResponse = {
 };
 
 export function HackathonDetail({ id }: { id: string }) {
-  const query = useQuery({
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery<DetailResponse>({
     queryKey: ['hackathon', id],
     queryFn: async () => {
-      const response = await fetch(`/api/hackathons/${id}`);
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error?.message ?? 'Could not load hackathon');
-      return body.data as DetailResponse;
+      const response = await fetch(`/api/hackathons/${id}`, { credentials: 'include' });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.error?.message ?? 'Could not load hackathon');
+      }
+      return body.data;
     },
   });
 
-  async function toggle(kind: 'bookmark' | 'interest', active: boolean) {
-    const response = await fetch(`/api/hackathons/${id}/${kind}`, { method: active ? 'DELETE' : 'POST' });
-    if (response.ok) void query.refetch();
-    else {
+  const toggleMutation = useMutation({
+    mutationFn: async ({ kind, active }: { kind: 'bookmark' | 'interest'; active: boolean }) => {
+      const response = await fetch(`/api/hackathons/${id}/${kind}`, {
+        method: active ? 'DELETE' : 'POST',
+        credentials: 'include',
+      });
       const body = await response.json().catch(() => null);
-      window.alert(body?.error?.message ?? 'Sign in to use this feature');
-    }
+      if (!response.ok) {
+        throw new Error(body?.error?.message ?? 'Please sign in to save hackathons.');
+      }
+      return body.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hackathon', id] });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 animate-pulse">
+        <div className="h-5 w-32 rounded bg-raised" />
+        <div className="h-64 rounded-3xl border border-line bg-surface p-8 space-y-4">
+          <div className="h-4 w-40 rounded bg-raised" />
+          <div className="h-8 w-3/4 rounded bg-raised" />
+          <div className="h-4 w-full rounded bg-raised" />
+        </div>
+      </div>
+    );
   }
 
-  if (query.isLoading) return <div className="text-slate-500">Loading hackathon…</div>;
-  if (query.error || !query.data) return <div className="rounded-xl bg-amber-50 p-5 text-amber-800">{query.error?.message ?? 'Hackathon not found.'}</div>;
-  const { hackathon } = query.data;
+  if (error || !data) {
+    return (
+      <div className="mx-auto max-w-4xl rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6 text-amber-300 flex items-center gap-3">
+        <AlertCircle size={20} />
+        <p className="text-sm font-medium">{error?.message ?? 'Hackathon listing not found.'}</p>
+      </div>
+    );
+  }
+
+  const { hackathon, bookmarked, interested } = data;
 
   return (
-    <div className="mx-auto max-w-4xl">
-      <Link href="/hackathons" className="text-sm font-semibold text-blue-700">← All hackathons</Link>
-      <div className="mt-6 rounded-3xl bg-slate-950 px-8 py-12 text-white">
-        <p className="text-sm font-semibold text-blue-300">{hackathon.organizer ?? 'Hackathon'} · {hackathon.mode ?? 'Open format'}</p>
-        <h1 className="mt-4 text-4xl font-bold">{hackathon.title}</h1>
-        <p className="mt-5 max-w-3xl leading-8 text-slate-300">{hackathon.description ?? 'The source has not provided a description yet.'}</p>
-        <div className="mt-8 flex flex-wrap gap-3">{hackathon.themes.map((theme) => <span key={theme} className="rounded-full bg-white/10 px-3 py-1.5 text-sm text-blue-100">{theme}</span>)}</div>
-      </div>
-      <div className="mt-6 grid gap-6 md:grid-cols-[1fr_280px]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 className="font-bold">Event details</h2>
-          <dl className="mt-5 space-y-4 text-sm">
-            <div><dt className="text-slate-400">When</dt><dd className="mt-1 text-slate-700">{hackathon.startAt ? new Date(hackathon.startAt).toLocaleString() : 'To be announced'}{hackathon.endAt ? ` – ${new Date(hackathon.endAt).toLocaleString()}` : ''}</dd></div>
-            <div><dt className="text-slate-400">Registration deadline</dt><dd className="mt-1 text-slate-700">{hackathon.registrationDeadlineAt ? new Date(hackathon.registrationDeadlineAt).toLocaleString() : 'To be announced'}</dd></div>
-            <div><dt className="text-slate-400">Location</dt><dd className="mt-1 text-slate-700">{hackathon.location ?? 'Online or to be announced'}</dd></div>
-            <div><dt className="text-slate-400">Prize</dt><dd className="mt-1 text-slate-700">{hackathon.prizeDisplay ?? 'Details on source listing'}</dd></div>
-          </dl>
-          {hackathon.techStack.length > 0 && <div className="mt-7"><h2 className="text-sm font-bold">Tech stack</h2><div className="mt-3 flex flex-wrap gap-2">{hackathon.techStack.map((item) => <span key={item} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">{item}</span>)}</div></div>}
+    <div className="mx-auto max-w-4xl space-y-8">
+      <Link
+        href="/hackathons"
+        className="inline-flex items-center gap-1.5 font-mono text-xs text-subtle hover:text-accent transition-colors"
+      >
+        <ArrowLeft size={14} /> Back to all hackathons
+      </Link>
+
+      {/* Hero Banner */}
+      <div className="rounded-3xl border border-line bg-surface/90 p-8 sm:p-10 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-accent">
+          <Sparkles size={13} />
+          <span>{hackathon.organizer ?? 'Verified Host'}</span>
+          <span>·</span>
+          <span>{hackathon.mode ?? 'Open Format'}</span>
         </div>
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <p className="text-sm text-slate-500">Plan your participation</p>
-          <div className="mt-4 grid gap-3"><button type="button" onClick={() => void toggle('bookmark', query.data.bookmarked)} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${query.data.bookmarked ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-slate-200 text-slate-700'}`}>{query.data.bookmarked ? 'Bookmarked' : 'Bookmark'}</button><button type="button" onClick={() => void toggle('interest', query.data.interested)} className={`rounded-xl border px-4 py-3 text-sm font-semibold ${query.data.interested ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-700'}`}>{query.data.interested ? 'Interested' : 'Mark interested'}</button></div>
-          {hackathon.registrationUrl ? <a href={hackathon.registrationUrl} target="_blank" rel="noreferrer" className="mt-4 block rounded-xl bg-blue-600 px-4 py-3 text-center font-semibold text-white">Register externally</a> : <p className="mt-4 text-sm text-slate-500">Registration URL not available.</p>}
+
+        <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+          {hackathon.title}
+        </h1>
+
+        <p className="mt-4 text-sm leading-relaxed text-subtle max-w-3xl">
+          {hackathon.description ?? 'No detailed description provided by organizer.'}
+        </p>
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          {hackathon.themes.map((theme) => (
+            <span
+              key={theme}
+              className="rounded-lg border border-line bg-raised/70 px-2.5 py-1 font-mono text-[11px] text-foreground"
+            >
+              {theme}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {toggleMutation.isError && (
+        <div className="flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-400">
+          <AlertCircle size={15} />
+          <span>{toggleMutation.error.message}</span>
+        </div>
+      )}
+
+      {/* Details Grid */}
+      <div className="grid gap-6 md:grid-cols-[1fr_300px]">
+        <div className="rounded-2xl border border-line bg-surface/80 p-6 space-y-6 backdrop-blur-sm">
+          <h2 className="font-mono text-xs uppercase tracking-wider text-accent">Schedule & Logistics</h2>
+          <dl className="space-y-4 text-xs font-mono">
+            <div>
+              <dt className="text-muted uppercase tracking-wider">Start / End</dt>
+              <dd className="mt-1 text-foreground">
+                {hackathon.startAt ? new Date(hackathon.startAt).toLocaleString() : 'TBA'}
+                {hackathon.endAt ? ` → ${new Date(hackathon.endAt).toLocaleString()}` : ''}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted uppercase tracking-wider">Registration Deadline</dt>
+              <dd className="mt-1 text-foreground">
+                {hackathon.registrationDeadlineAt
+                  ? new Date(hackathon.registrationDeadlineAt).toLocaleString()
+                  : 'Open indefinitely'}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted uppercase tracking-wider">Format & Location</dt>
+              <dd className="mt-1 text-foreground">{hackathon.location ?? 'Online / Distributed'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted uppercase tracking-wider">Prizes & Bounties</dt>
+              <dd className="mt-1 text-foreground">{hackathon.prizeDisplay ?? 'Check registration page'}</dd>
+            </div>
+          </dl>
+
+          {hackathon.techStack.length > 0 && (
+            <div className="border-t border-line/60 pt-6">
+              <h3 className="font-mono text-xs uppercase tracking-wider text-accent mb-3">Tech Ecosystem</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {hackathon.techStack.map((tech) => (
+                  <span
+                    key={tech}
+                    className="rounded-md border border-line bg-raised px-2.5 py-1 font-mono text-[10px] text-foreground"
+                  >
+                    {tech}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Action Panel */}
+        <div className="rounded-2xl border border-line bg-surface/80 p-6 space-y-4 backdrop-blur-sm h-fit">
+          <p className="font-mono text-xs uppercase tracking-wider text-accent">Participation</p>
+
+          <div className="space-y-2.5">
+            <button
+              type="button"
+              onClick={() => toggleMutation.mutate({ kind: 'bookmark', active: bookmarked })}
+              disabled={toggleMutation.isPending}
+              className={`w-full flex items-center justify-center gap-2 rounded-xl border p-3 font-mono text-xs font-semibold transition-all ${
+                bookmarked
+                  ? 'border-accent bg-accent/15 text-accent'
+                  : 'border-line bg-raised/50 text-foreground hover:bg-raised'
+              }`}
+            >
+              <Bookmark size={14} />
+              <span>{bookmarked ? 'Bookmarked' : 'Bookmark Event'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => toggleMutation.mutate({ kind: 'interest', active: interested })}
+              disabled={toggleMutation.isPending}
+              className={`w-full flex items-center justify-center gap-2 rounded-xl border p-3 font-mono text-xs font-semibold transition-all ${
+                interested
+                  ? 'border-emerald-500 bg-emerald-500/15 text-emerald-400'
+                  : 'border-line bg-raised/50 text-foreground hover:bg-raised'
+              }`}
+            >
+              <Heart size={14} />
+              <span>{interested ? 'Interested' : 'Mark as Interested'}</span>
+            </button>
+          </div>
+
+          <div className="border-t border-line/60 pt-4 space-y-2.5">
+            {hackathon.registrationUrl ? (
+              <a
+                href={hackathon.registrationUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-center gap-2 w-full rounded-xl bg-accent p-3 text-xs font-semibold text-black transition-all hover:opacity-90 active:scale-95"
+              >
+                <span>Register on Portal</span>
+                <ExternalLink size={13} />
+              </a>
+            ) : (
+              <p className="font-mono text-[11px] text-muted text-center">Registration link pending.</p>
+            )}
+
+            <Link
+              href={`/find-partners?hackathonId=${hackathon.id}`}
+              className="flex items-center justify-center gap-2 w-full rounded-xl border border-line bg-raised/60 p-3 font-mono text-xs text-foreground transition-all hover:border-accent hover:text-accent"
+            >
+              <Sparkles size={13} />
+              <span>Find Partners</span>
+            </Link>
+          </div>
         </div>
       </div>
     </div>

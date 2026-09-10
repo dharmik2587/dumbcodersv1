@@ -11,16 +11,16 @@ export interface HackathonListResponse {
   };
 }
 
-function normalizeHackathon(raw: any, index: number = 0): Hackathon {
+function normalizeHackathon(raw: Record<string, unknown>, index: number = 0): Hackathon {
   // If already in frontend format
   if (raw.name && raw.registerDeadline) {
-    return raw as Hackathon;
+    return raw as unknown as Hackathon;
   }
 
-  const title = raw.title || raw.name || 'Hackathon';
-  const organizer = raw.organizer || raw.host || 'Unstop';
-  const location = raw.location || raw.city || 'Online';
-  const themes = Array.isArray(raw.themes) && raw.themes.length > 0 ? raw.themes : ['AI / ML', 'Web'];
+  const title = (raw.title || raw.name || 'Hackathon') as string;
+  const organizer = (raw.organizer || raw.host || 'Unstop') as string;
+  const location = (raw.location || raw.city || 'Online') as string;
+  const themes = Array.isArray(raw.themes) && raw.themes.length > 0 ? (raw.themes as string[]) : ['AI / ML', 'Web'];
   const primaryTrack = themes[0] || 'Open';
   const rawMode = String(raw.mode || 'online').toLowerCase();
   const mode: Hackathon['mode'] = rawMode.includes('hybrid')
@@ -30,17 +30,22 @@ function normalizeHackathon(raw: any, index: number = 0): Hackathon {
     : 'remote';
 
   const prizeNum = Number(raw.prizeAmount || raw.prize) || 100000;
-  const deadlineStr = raw.registrationDeadlineAt || raw.registerDeadline || new Date(Date.now() + 14 * 86400000).toISOString();
-  const startStr = raw.startAt || raw.startDate || new Date(Date.now() + 18 * 86400000).toISOString();
+  const deadlineStr = String(raw.registrationDeadlineAt || raw.registerDeadline || new Date(Date.now() + 14 * 86400000).toISOString());
+  const startStr = String(raw.startAt || raw.startDate || new Date(Date.now() + 18 * 86400000).toISOString());
 
   const deadlineDate = new Date(deadlineStr);
   const now = new Date();
   const daysDiff = Math.ceil((deadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
   const status: Hackathon['status'] = daysDiff < 0 ? 'closed' : daysDiff <= 7 ? 'closing' : 'open';
 
+  const rawId = typeof raw.id === 'string' ? raw.id : `hk-${1000 + index}`;
+  const rawKey = typeof raw.canonicalKey === 'string' ? raw.canonicalKey : `HK-${rawId.slice(0, 6).toUpperCase()}`;
+  const descriptionStr = typeof raw.description === 'string' ? raw.description : `${primaryTrack} Hackathon organized by ${organizer}. Showcase your skills, build prototypes, and compete for prizes.`;
+  const regUrl = typeof raw.registrationUrl === 'string' ? raw.registrationUrl : typeof raw.registration_url === 'string' ? raw.registration_url : undefined;
+
   return {
-    id: raw.id || `hk-${1000 + index}`,
-    code: raw.canonicalKey || `HK-${raw.id?.slice(0, 6).toUpperCase() || 2000 + index}`,
+    id: rawId,
+    code: rawKey,
     name: title,
     host: organizer,
     city: location,
@@ -56,9 +61,9 @@ function normalizeHackathon(raw: any, index: number = 0): Hackathon {
     minTeamSize: Number(raw.teamSizeMin) || 1,
     demand: daysDiff <= 10 ? 'high' : daysDiff <= 25 ? 'medium' : 'low',
     trackDemands: { ml: 0.85, backend: 0.8, frontend: 0.75 },
-    description: raw.description || `${primaryTrack} Hackathon organized by ${organizer}. Showcase your skills, build prototypes, and compete for prizes.`,
+    description: descriptionStr,
     status,
-    registrationUrl: raw.registrationUrl || raw.registration_url || undefined,
+    registrationUrl: regUrl,
   };
 }
 
@@ -83,17 +88,17 @@ export async function listHackathons(params?: {
   const endpoint = `/api/hackathons${query ? `?${query}` : ''}`;
 
   try {
-    const res = await get<any>(endpoint);
+    const res = await get<{ data?: Record<string, unknown>[] | { data?: Record<string, unknown>[]; meta?: { page?: number; pageSize?: number; total?: number; hasMore?: boolean } }; meta?: { page?: number; pageSize?: number; total?: number; hasMore?: boolean } }>(endpoint);
     const innerData = res?.data;
-    const rawList = Array.isArray(innerData?.data)
-      ? innerData.data
-      : Array.isArray(innerData)
-        ? innerData
+    const rawList: Record<string, unknown>[] = Array.isArray(innerData)
+      ? innerData
+      : Array.isArray((innerData as { data?: Record<string, unknown>[] })?.data)
+        ? (innerData as { data: Record<string, unknown>[] }).data
         : Array.isArray(res)
-          ? res
+          ? (res as Record<string, unknown>[])
           : [];
-    const normalized = rawList.map((item: any, i: number) => normalizeHackathon(item, i));
-    const meta = innerData?.meta || res?.meta || {};
+    const normalized = rawList.map((item, i: number) => normalizeHackathon(item, i));
+    const meta = (innerData && !Array.isArray(innerData) && 'meta' in innerData ? (innerData as { meta?: { page?: number; pageSize?: number; total?: number; hasMore?: boolean } }).meta : undefined) || res?.meta || {};
     return {
       data: normalized,
       meta: {

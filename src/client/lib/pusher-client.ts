@@ -5,7 +5,7 @@ let client: PusherClient | null = null;
 export function getPusherClient(): PusherClient | null {
   if (client) return client;
 
-  const key = process.env.NEXT_PUBLIC_PUSHER_KEY || 'ced935ef80269f1b3707';
+  const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
   const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER || 'ap2';
 
   if (!key) return null;
@@ -22,7 +22,7 @@ export function getPusherClient(): PusherClient | null {
   }
 }
 
-export function subscribeChannel(channelName: string, eventName: string, callback: (data: any) => void) {
+export function subscribeChannel<T = unknown>(channelName: string, eventName: string, callback: (data: T) => void) {
   const pusher = getPusherClient();
   if (!pusher) return () => {};
 

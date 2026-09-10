@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { getCoreDb } from '@/lib/db/core';
 import { profiles, teamMembers, teamMessages, teams } from '@/lib/db/schema/core';
+import { sqlEncrypt, sqlDecrypt } from '@/lib/crypto';
 
 export async function getTeamById(teamId: string) {
   const db = getCoreDb();
@@ -83,10 +84,16 @@ export async function createTeamMessage(teamId: string, userId: string, content:
     .values({
       teamId,
       userId,
-      content,
+      content: sqlEncrypt(content) as unknown as string,
       createdAt: new Date(),
     })
-    .returning();
+    .returning({
+      id: teamMessages.id,
+      teamId: teamMessages.teamId,
+      userId: teamMessages.userId,
+      content: sqlDecrypt(teamMessages.content),
+      createdAt: teamMessages.createdAt,
+    });
   return msg;
 }
 
@@ -95,7 +102,7 @@ export async function listTeamMessages(teamId: string) {
   return db
     .select({
       id: teamMessages.id,
-      content: teamMessages.content,
+      content: sqlDecrypt(teamMessages.content),
       createdAt: teamMessages.createdAt,
       userId: teamMessages.userId,
       authorName: profiles.fullName,

@@ -23,6 +23,7 @@ import {
 import { cn } from "@/client/utils/cn";
 import { removeTeamMember } from "@/client/lib/api";
 import { TeamChat } from "@/components/chat/TeamChat";
+import { computeTeamGaps } from "@/lib/teams/roster";
 
 const STATE_TONE: Record<RequestState, "accent" | "mint" | "amber" | "danger" | "neutral"> = {
   new: "accent",
@@ -464,6 +465,21 @@ function TeamWorkspace() {
     [team, byId, hack],
   );
 
+  const rosterGaps = useMemo(() => {
+    if (!team) return null;
+    const membersWithProfiles = team.members.map((m) => {
+      const b = byId.get(m.builderId);
+      return {
+        role: m.role,
+        profile: {
+          skills: b?.skills.map((s) => s.label) ?? [],
+          rolePreference: b?.role ?? null,
+        },
+      };
+    });
+    return computeTeamGaps(membersWithProfiles);
+  }, [team, byId]);
+
   if (!team || !cov)
     return <EmptyState title="Team not found" body="Pick a team from the index." action={<Link href="/teams"><Button variant="outline">Teams</Button></Link>} />;
 
@@ -543,6 +559,52 @@ function TeamWorkspace() {
                   <Button size="sm" className="mt-3">Find people for this gap</Button>
                 </Link>
               </div>
+            </Reveal>
+          )}
+
+          {rosterGaps && (
+            <Reveal delay={85}>
+              <Panel>
+                <div className="flex items-center justify-between border-b border-line px-5 py-3">
+                  <Label tone="accent">canonical role coverage</Label>
+                  <span className="font-mono text-[10px] tnum text-fg3">
+                    {rosterGaps.coverage}% covered ({rosterGaps.covered.length}/{rosterGaps.covered.length + rosterGaps.missing.length})
+                  </span>
+                </div>
+                <div className="p-5 space-y-4">
+                  <div className="flex flex-wrap gap-2">
+                    {rosterGaps.covered.map((role) => (
+                      <span
+                        key={role}
+                        className="inline-flex items-center gap-1.5 border border-mint-line bg-mint-soft px-2.5 py-1 font-mono text-[11px] text-mint uppercase tracking-wider"
+                      >
+                        ✓ {role}
+                      </span>
+                    ))}
+                    {rosterGaps.missing.map((role) => (
+                      <span
+                        key={role}
+                        className="inline-flex items-center gap-1.5 border border-amber-line bg-amber-soft px-2.5 py-1 font-mono text-[11px] text-amber uppercase tracking-wider"
+                      >
+                        ! {role} missing
+                      </span>
+                    ))}
+                  </div>
+
+                  {rosterGaps.missing.length > 0 && (
+                    <div className="mt-3 border-t border-line/60 pt-4 flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-mono text-xs text-subtle">
+                        Suggested: invite a <span className="text-amber font-semibold uppercase">{rosterGaps.missing[0]}</span> builder to complete your roster.
+                      </p>
+                      <Link href={`/match?teamId=${team.id}&role=${rosterGaps.missing[0]}`}>
+                        <Button size="sm">
+                          Invite a {rosterGaps.missing[0]} builder →
+                        </Button>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </Panel>
             </Reveal>
           )}
 

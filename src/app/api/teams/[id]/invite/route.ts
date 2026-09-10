@@ -7,6 +7,7 @@ import { getTeamById } from '@/lib/db/queries/teams';
 import { profiles, teamMembers, teamRequests } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
 import { teamInviteSchema } from '@/lib/validations/team';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -14,6 +15,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   let userId: string;
   try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
+
+  const rl = await enforceRateLimit(`team-invite:${userId}`, 15, 60);
+  if (!rl.success && rl.response) return rl.response;
+
   const teamId = (await params).id;
   const teamResult = await getTeamById(teamId);
   if (!teamResult) return failure('NOT_FOUND', 'Team not found.', 404);

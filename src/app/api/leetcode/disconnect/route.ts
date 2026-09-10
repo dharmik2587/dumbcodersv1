@@ -51,12 +51,12 @@ export async function DELETE() {
       success: true,
       message: 'LeetCode account disconnected.',
     }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('LeetCode disconnect error:', error);
     return Response.json({
       success: false,
       error: 'SERVER_ERROR',
-      message: error.message || 'Failed to disconnect LeetCode account.',
+      message: error instanceof Error ? error.message : 'Failed to disconnect LeetCode account.',
     }, { status: 500 });
   }
 }

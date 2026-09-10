@@ -41,9 +41,9 @@ export async function POST(request: NextRequest) {
     }, { status: 429 });
   }
 
-  let body: any;
+  let body: { username?: string } | null = null;
   try {
-    body = await request.json();
+    body = (await request.json()) as { username?: string };
   } catch {
     return Response.json({ success: false, verified: false, error: 'INVALID_BODY', message: 'Request body must be JSON.' }, { status: 400 });
   }
@@ -92,12 +92,12 @@ export async function POST(request: NextRequest) {
     let profile;
     try {
       profile = await fetchLeetcodePublicProfile(cleanUsername);
-    } catch (e: any) {
+    } catch (e: unknown) {
       return Response.json({
         success: false,
         verified: false,
         error: 'LEETCODE_UNAVAILABLE',
-        message: `Unable to fetch profile from LeetCode: ${e.message || 'Service unreachable'}`,
+        message: `Unable to fetch profile from LeetCode: ${e instanceof Error ? e.message : 'Service unreachable'}`,
       }, { status: 502 });
     }
 
@@ -185,13 +185,13 @@ export async function POST(request: NextRequest) {
       username: profile.username,
       message: 'LeetCode account verified successfully.',
     }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('LeetCode verify error:', error);
     return Response.json({
       success: false,
       verified: false,
       error: 'SERVER_ERROR',
-      message: error.message || 'An internal error occurred during verification.',
+      message: error instanceof Error ? error.message : 'An internal error occurred during verification.',
     }, { status: 500 });
   }
 }

@@ -6,6 +6,7 @@ import { createNotification, createOutboxEvent } from '@/lib/db/queries/notifica
 import { getTeamById } from '@/lib/db/queries/teams';
 import { teamMembers, teamRequests } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,9 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   let leaderId: string;
   try { leaderId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
+
+  const rl = await enforceRateLimit(`team-approve:${leaderId}`, 20, 60);
+  if (!rl.success && rl.response) return rl.response;
   const { id: teamId, userId } = await params;
   const teamResult = await getTeamById(teamId);
   if (!teamResult) return failure('NOT_FOUND', 'Team not found.', 404);

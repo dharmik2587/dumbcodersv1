@@ -3,7 +3,7 @@ export interface BeamsNotificationPayload {
   body: string;
   icon?: string;
   deepLink?: string;
-  data?: Record<string, any>;
+  data?: Record<string, unknown>;
 }
 
 export async function publishBeamsNotification(
@@ -12,15 +12,17 @@ export async function publishBeamsNotification(
 ) {
   const instanceId =
     process.env.PUSHER_BEAMS_INSTANCE_ID ||
-    process.env.NEXT_PUBLIC_PUSHER_BEAMS_INSTANCE_ID ||
-    'e73529a8-e692-47fb-b5f7-2c72864c654e';
-  const secretKey =
-    process.env.PUSHER_BEAMS_SECRET_KEY ||
-    'D755F41F76CD88E8B5583E9B6E83544615522084B4843E286F3FE7143E4B209D';
+    process.env.NEXT_PUBLIC_PUSHER_BEAMS_INSTANCE_ID;
+  const secretKey = process.env.PUSHER_BEAMS_SECRET_KEY;
+
+  if (!instanceId || !secretKey) {
+    console.warn('[PusherBeams] publish skipped: PUSHER_BEAMS_INSTANCE_ID or PUSHER_BEAMS_SECRET_KEY not set.');
+    return null;
+  }
 
   const url = `https://${instanceId}.pushnotifications.pusher.com/publish_api/v1/instances/${instanceId}/publishes`;
 
-  const payload: any = {
+  const payload: Record<string, unknown> = {
     interests,
     web: {
       notification: {
@@ -33,7 +35,10 @@ export async function publishBeamsNotification(
   };
 
   if (notification.icon && notification.icon.startsWith('http')) {
-    payload.web.notification.icon = notification.icon;
+    (payload.web as Record<string, unknown>).notification = {
+      ...((payload.web as Record<string, unknown>).notification as Record<string, unknown>),
+      icon: notification.icon,
+    };
   }
 
   const response = await fetch(url, {

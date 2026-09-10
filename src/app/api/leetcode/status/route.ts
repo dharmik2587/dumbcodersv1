@@ -60,12 +60,12 @@ export async function GET() {
       verified_at: record.verifiedAt ? record.verifiedAt.toISOString() : undefined,
       last_synced_at: record.lastSyncedAt ? record.lastSyncedAt.toISOString() : undefined,
     }, { status: 200 });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('LeetCode status error:', error);
     return Response.json({
       success: false,
       error: 'SERVER_ERROR',
-      message: error.message || 'Failed to check status.',
+      message: error instanceof Error ? error.message : 'Failed to check status.',
     }, { status: 500 });
   }
 }

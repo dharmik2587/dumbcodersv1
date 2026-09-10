@@ -15,6 +15,7 @@ import {
   Keyboard,
   LogOut,
   Menu,
+  MessageSquare,
   Search,
   Settings,
   Sparkles,
@@ -31,10 +32,12 @@ import { Toaster, IconButton } from "./ui";
 import { daysLeft } from "@/client/data/seed";
 import { ROLE_LABEL, RoleKey } from "@/client/types";
 import { useTheme } from "@/client/lib/theme";
+import { getPusherClient } from "@/client/lib/pusher-client";
 
 const NAV = [
   { to: "/discover", label: "Discover", icon: Compass, key: "g d" },
   { to: "/match", label: "Match", icon: Sparkles, key: "g m" },
+  { to: "/messages", label: "Messages", icon: MessageSquare, key: "g x" },
   { to: "/requests", label: "Requests", icon: Inbox, key: "g r" },
   { to: "/teams", label: "Teams", icon: Users, key: "g t" },
   { to: "/leaderboard", label: "Leaderboard", icon: Trophy, key: "g l" },
@@ -78,6 +81,30 @@ function CountdownChip() {
         {String(s).padStart(2, "0")}
       </span>
     </Link>
+  );
+}
+
+function OnlinePresenceChip() {
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    const pusher = getPusherClient();
+    if (pusher) {
+      setConnected(pusher.connection.state === 'connected');
+      pusher.connection.bind('state_change', (states: { current: string }) => {
+        setConnected(states.current === 'connected');
+      });
+    }
+  }, []);
+
+  return (
+    <div
+      className="hidden sm:inline-flex items-center gap-1.5 border border-line bg-raised/60 px-2.5 py-1 rounded-full font-mono text-[10px] text-fg3"
+      title={connected ? "Pusher real-time active" : "Connecting real-time channel"}
+    >
+      <span className={cn("h-1.5 w-1.5 rounded-full", connected ? "bg-mint animate-pulse" : "bg-muted")} />
+      <span>{connected ? "online" : "syncing"}</span>
+    </div>
   );
 }
 
@@ -412,6 +439,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     let gPending = false;
     let gTimer = 0;
     const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setPalette(false);
+        setShortcuts(false);
+        setMobileNav(false);
+        setTeamSheet(false);
+        return;
+      }
       const el = e.target as HTMLElement;
       const typing =
         el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable;
@@ -444,6 +478,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         const map: Record<string, string> = {
           d: "/discover",
           m: "/match",
+          x: "/messages",
           r: "/requests",
           t: "/teams",
           c: "/calendar",
@@ -677,6 +712,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </button>
 
             <CountdownChip />
+            <OnlinePresenceChip />
             <Notifications />
 
             <IconButton label="Keyboard shortcuts" onClick={() => setShortcuts(true)}>
@@ -686,14 +722,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         <main className="relative px-4 pb-24 pt-6 md:px-6 md:pb-10">
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {children}
-          </motion.div>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={pathname}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 
@@ -721,7 +760,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </IconButton>
               </div>
               <ul className="mt-6 space-y-1">
-                {([...NAV, isAuthenticated ? { to: "#", label: "Sign out", icon: LogOut, key: "", action: () => { signOut(); router.push("/sign-in"); } } : { to: "/sign-in", label: "Sign in", icon: LogOut, key: "" }] as any[]).map((n) => (
+                {([...NAV, isAuthenticated ? { to: "#", label: "Sign out", icon: LogOut, key: "", action: () => { signOut(); router.push("/sign-in"); } } : { to: "/sign-in", label: "Sign in", icon: LogOut, key: "" }] as Array<{ to: string; label: string; icon: typeof LogOut; key: string; action?: () => void }>).map((n) => (
                   <li key={n.label}>
                     {n.action ? (
                       <button onClick={n.action} className="flex w-full items-center gap-3 px-2 py-2.5 text-[13.5px] text-fg2 transition-colors hover:text-fg text-left">

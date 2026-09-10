@@ -38,7 +38,7 @@ export const profileUpdateSchema = z.object({
   skills: z.array(z.string().trim().min(1).max(50)).max(30).optional().default([]),
   rolePreference: optionalString(80),
   hackathonInterests: z.array(z.string().trim().min(1).max(80)).max(20).optional().default([]),
-  availability: optionalString(120),
+  availability: optionalString(4000),
   portfolioUrl: optionalUrl,
   linkedinUrl: optionalUrl,
   onboardingDone: z.boolean().optional(),

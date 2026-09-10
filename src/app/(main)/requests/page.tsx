@@ -38,6 +38,37 @@ const STATUS_LABEL: Record<string, string> = {
   withdrawn: "withdrawn",
 };
 
+export type RequestRow = {
+  request?: {
+    id: string;
+    fromUserId: string;
+    toUserId: string;
+    status: string;
+    message?: string | null;
+    roleOffered?: string | null;
+    createdAt?: string;
+    teamId?: string | null;
+  };
+  id?: string;
+  fromUserId?: string;
+  toUserId?: string;
+  status?: string;
+  message?: string | null;
+  roleOffered?: string | null;
+  createdAt?: string;
+  teamId?: string | null;
+  from?: {
+    id: string;
+    fullName?: string | null;
+    username?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  team?: {
+    id?: string;
+    name?: string;
+  } | null;
+};
+
 function Requests() {
   const [tab, setTab] = useState<"inbox" | "sent">("inbox");
   const [loading, setLoading] = useState(true);
@@ -65,8 +96,12 @@ function Requests() {
   }
 
   // Real DB fields: fromUserId / toUserId / status
-  const inbox = requests.filter((r: any) => r.request?.toUserId === me.id || r.toUserId === me.id);
-  const sent = requests.filter((r: any) => r.request?.fromUserId === me.id || r.fromUserId === me.id);
+  const inbox = (requests as unknown as RequestRow[]).filter(
+    (r) => r.request?.toUserId === me.id || r.toUserId === me.id
+  );
+  const sent = (requests as unknown as RequestRow[]).filter(
+    (r) => r.request?.fromUserId === me.id || r.fromUserId === me.id
+  );
   const list = tab === "inbox" ? inbox : sent;
 
   return (
@@ -83,7 +118,7 @@ function Requests() {
           value={tab}
           onChange={setTab}
           tabs={[
-            { id: "inbox", label: "Inbox", count: inbox.filter((r: any) => (r.request?.status ?? r.status) === "pending").length },
+            { id: "inbox", label: "Inbox", count: inbox.filter((r) => (r.request?.status ?? r.status) === "pending").length },
             { id: "sent", label: "Sent", count: sent.length },
           ]}
         />
@@ -102,7 +137,7 @@ function Requests() {
           />
         ) : (
           <div className="grid gap-px border border-line bg-line md:grid-cols-2 xl:grid-cols-3">
-            {list.map((r: any, i: number) => (
+            {list.map((r, i: number) => (
               <Reveal key={r.request?.id ?? r.id} delay={i * 60}>
                 <RequestCard r={r} byId={byId} teams={teams} inbox={tab === "inbox"} />
               </Reveal>
@@ -120,9 +155,9 @@ function RequestCard({
   teams,
   inbox,
 }: {
-  r: any;
-  byId: Map<string, any>;
-  teams: any[];
+  r: RequestRow;
+  byId: Map<string, import("@/client/types").Builder>;
+  teams: import("@/client/types").Team[];
   inbox: boolean;
 }) {
   const acceptRequest = useApiStore((s) => s.acceptRequest);
@@ -137,32 +172,33 @@ function RequestCard({
   const fromProfile = r.from ?? null;
   const teamData = r.team ?? null;
 
-  const requestId = req.id;
-  const fromUserId = req.fromUserId;
-  const toUserId = req.toUserId;
+  const requestId = req.id || "";
+  const fromUserId = req.fromUserId || "";
+  const toUserId = req.toUserId || "";
   const status = req.status ?? "pending";
   const message = req.message;
   const roleOffered = req.roleOffered;
-  const createdAt = req.createdAt;
+  const createdAt = req.createdAt || new Date().toISOString();
   const teamId = req.teamId;
 
   // Look up the "other" person
   const otherUserId = inbox ? fromUserId : toUserId;
-  const person = byId.get(otherUserId) ?? (fromProfile ? {
+  const person = (otherUserId ? byId.get(otherUserId) : null) ?? (fromProfile ? {
     id: fromProfile.id,
     name: fromProfile.fullName ?? fromProfile.username ?? "Unknown",
     handle: fromProfile.username ?? "",
-    avatarUrl: fromProfile.avatarUrl,
+    avatarUrl: fromProfile.avatarUrl ?? undefined,
     initials: (fromProfile.fullName ?? fromProfile.username ?? "?").slice(0, 2).toUpperCase(),
     skills: [],
     repos: [],
   } : null);
 
-  const team = teams.find((t) => t.id === teamId) ?? (teamData ? { id: teamData.id, name: teamData.name, members: [], openSlots: [] } : null);
+  const team = teams.find((t) => t.id === teamId) ?? (teamData?.id ? { id: teamData.id, name: teamData.name || 'Team', members: [], openSlots: [], hackathonId: '', ownerId: '', visibility: 'discoverable' as const } : null);
   const statusTone = STATUS_TONE[status] ?? "neutral";
   const statusLabel = STATUS_LABEL[status] ?? status;
 
   const act = async (action: "accept" | "reject" | "withdraw") => {
+    if (!requestId) return;
     setActing(true);
     try {
       if (action === "accept") {
@@ -178,7 +214,15 @@ function RequestCard({
   };
 
   const [chatOpen, setChatOpen] = useState(false);
-  const [messages, setMessages] = useState<any[]>([]);
+  const [messages, setMessages] = useState<Array<{
+    id: string;
+    content: string;
+    createdAt: string;
+    userId: string;
+    authorName?: string | null;
+    authorUsername?: string | null;
+    authorAvatar?: string | null;
+  }>>([]);
   const [chatLoading, setChatLoading] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [sendingMsg, setSendingMsg] = useState(false);

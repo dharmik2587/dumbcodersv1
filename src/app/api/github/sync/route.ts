@@ -4,6 +4,7 @@ import { githubData } from '@/lib/db/schema/core';
 import { requireUserId } from '@/lib/auth/server';
 import { createClient } from '@/lib/supabase/server';
 import { failure, success } from '@/lib/http';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -16,6 +17,31 @@ export async function POST() {
   }
 
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
+
+  const rl = await enforceRateLimit(`github-sync:${userId}`, 10, 60);
+  if (!rl.success && rl.response) return rl.response;
+
+  const db = getCoreDb();
+
+  // 24-hour cooldown check
+  const existingRecord = await db
+    .select({ syncedAt: githubData.syncedAt })
+    .from(githubData)
+    .where(eq(githubData.userId, userId))
+    .limit(1);
+
+  if (existingRecord[0]?.syncedAt) {
+    const cooldownMs = 24 * 60 * 60 * 1000;
+    const elapsed = Date.now() - new Date(existingRecord[0].syncedAt).getTime();
+    if (elapsed < cooldownMs) {
+      const remainingHours = Math.max(1, Math.ceil((cooldownMs - elapsed) / (60 * 60 * 1000)));
+      return failure(
+        'COOLDOWN_ACTIVE',
+        `GitHub profile was synced recently. Please wait ${remainingHours} hour(s) before syncing again.`,
+        429,
+      );
+    }
+  }
 
   try {
     const supabase = await createClient();
@@ -79,7 +105,6 @@ export async function POST() {
       return counts;
     }, {});
 
-    const db = getCoreDb();
     const [saved] = await db
       .insert(githubData)
       .values({
@@ -113,7 +138,7 @@ export async function POST() {
       .returning();
 
     return success(saved);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('POST /api/github/sync failed', error);
     return failure('GITHUB_SYNC_FAILED', 'GitHub synchronization failed.', 500);
   }

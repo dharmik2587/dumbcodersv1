@@ -180,3 +180,5 @@ export type Notification = {
   read: boolean;
   href: string;
 };
+
+export type { LeaderboardEntry } from './store/apiStore';

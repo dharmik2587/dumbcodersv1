@@ -6,6 +6,7 @@ import { createNotification, createOutboxEvent } from '@/lib/db/queries/notifica
 import { getRequestById } from '@/lib/db/queries/requests';
 import { teamMembers, teamRequests } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -13,6 +14,10 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   let userId: string;
   try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
+
+  const rl = await enforceRateLimit(`request-action:${userId}`, 20, 60);
+  if (!rl.success && rl.response) return rl.response;
+
   const id = (await params).id;
   const existing = await getRequestById(id);
   if (!existing || existing.toUserId !== userId) return failure('NOT_FOUND', 'Request not found.', 404);

@@ -6,6 +6,7 @@ import { githubData, leetcodeData, profiles } from '@/lib/db/schema/core';
 import { fetchLeetcodeStats } from '@/lib/leaderboard/leetcode';
 import { fetchGithubPublicStats } from '@/lib/leaderboard/github-public';
 import { failure, success } from '@/lib/http';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
@@ -32,6 +33,9 @@ export async function POST(request: NextRequest) {
   if (!hasCoreDatabase()) {
     return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
   }
+
+  const rl = await enforceRateLimit(`leaderboard-submit:${userId}`, 10, 60);
+  if (!rl.success && rl.response) return rl.response;
 
   let body: { platform?: string; username?: string };
   try {
@@ -159,7 +163,7 @@ export async function POST(request: NextRequest) {
         message: `GitHub profile "${stats.username}" linked successfully.`,
       });
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error(`POST /api/leaderboard/submit [${platform}] failed`, error);
     return failure(
       'FETCH_FAILED',
