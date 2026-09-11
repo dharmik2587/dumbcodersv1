@@ -156,7 +156,7 @@ type State = {
   setActiveTeam: (id: string | null) => void;
   toggleBookmark: (id: string) => Promise<void>;
   sendRequest: (data: { toUserId: string; teamId?: string | null; hackathonId?: string | null; message?: string; roleOffered?: string }) => Promise<void>;
-  acceptRequest: (id: string) => Promise<void>;
+  acceptRequest: (id: string) => Promise<requestsApi.AcceptRequestResult | null>;
   rejectRequest: (id: string) => Promise<void>;
   withdrawRequest: (id: string) => Promise<void>;
   pushToast: (t: Omit<Toast, 'id'>) => void;
@@ -588,13 +588,15 @@ export const useApiStore = create<State>()(
       // Accept a request via real API
       acceptRequest: async (id) => {
         try {
-          await requestsApi.acceptRequest(id);
+          const res = await requestsApi.acceptRequest(id);
           await get().loadRequests();
           await get().loadTeams();
           get().pushToast({ label: 'Accepted', body: 'They have been added to the team.', tone: 'good' });
+          return res;
         } catch (error: unknown) {
           console.error('Failed to accept request:', error);
           get().pushToast({ label: 'Error', body: error instanceof Error ? error.message : 'Could not accept request.', tone: 'bad' });
+          return null;
         }
       },
 

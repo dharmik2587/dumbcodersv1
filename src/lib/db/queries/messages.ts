@@ -36,13 +36,13 @@ function normalizePair(u1: string, u2: string): [string, string] {
 /**
  * Gets or creates a conversation between two users.
  */
-export async function getOrCreateConversation(user1Id: string, user2Id: string) {
+export async function getOrCreateConversation(user1Id: string, user2Id: string, client?: any) {
   if (user1Id === user2Id) {
     throw new Error('Cannot start a conversation with yourself.');
   }
 
   const [userAId, userBId] = normalizePair(user1Id, user2Id);
-  const db = getCoreDb();
+  const db = client || getCoreDb();
 
   const existing = await db
     .select()

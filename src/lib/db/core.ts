@@ -1,7 +1,8 @@
-import { neon } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-http';
+import { Pool } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-serverless';
 import * as schema from './schema/core';
 
+let cachedPool: Pool | undefined;
 let cachedDb: ReturnType<typeof drizzle<typeof schema>> | undefined;
 
 export function hasCoreDatabase() {
@@ -14,8 +15,8 @@ export function getCoreDb() {
   }
 
   if (!cachedDb) {
-    const sql = neon(process.env.CORE_DATABASE_URL);
-    cachedDb = drizzle(sql, {
+    cachedPool = new Pool({ connectionString: process.env.CORE_DATABASE_URL });
+    cachedDb = drizzle(cachedPool, {
       schema,
       logger: process.env.NODE_ENV === 'development',
     });

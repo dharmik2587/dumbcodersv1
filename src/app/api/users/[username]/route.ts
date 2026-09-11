@@ -21,6 +21,7 @@ export async function GET(
       ...result.profile,
       college: result.college,
       github: result.github,
+      socialAccounts: result.socialAccounts ?? [],
     });
   } catch (error) {
     console.error('GET /api/users/[username] failed', error);

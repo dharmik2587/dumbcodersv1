@@ -32,7 +32,10 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
-    public code?: string
+    public code?: string,
+    public requestId?: string,
+    public api?: string,
+    public provider?: string
   ) {
     super(message);
     this.name = 'ApiError';
@@ -42,22 +45,35 @@ export class ApiError extends Error {
 async function handleResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get('content-type');
   const isJson = contentType?.includes('application/json');
+  const headerRequestId = response.headers.get('X-Request-ID') || response.headers.get('x-request-id');
 
   if (!response.ok) {
     let errorMessage = `HTTP ${response.status}`;
     let errorCode: string | undefined;
+    let requestId = headerRequestId || undefined;
+    let api: string | undefined;
+    let provider: string | undefined;
 
     if (isJson) {
       try {
         const data = await response.json();
-        errorMessage = data.message || (typeof data.error === 'string' ? data.error : data.error?.message) || errorMessage;
-        errorCode = data.code || data.error?.code;
+        errorMessage =
+          data.error?.message || data.message || (typeof data.error === 'string' ? data.error : errorMessage);
+        errorCode = data.error?.code || data.code;
+        requestId = data.error?.requestId || headerRequestId || undefined;
+        api = data.error?.api || data.api;
+        provider = data.error?.provider || data.provider;
       } catch {
         // If JSON parsing fails, use default error message
       }
     }
 
-    throw new ApiError(errorMessage, response.status, errorCode);
+    // Structured console error per PRD Section 45
+    console.error(
+      `[HackMate API Error]\nAPI: ${api || response.url}\nCode: ${errorCode || 'UNKNOWN'}\nRequest ID: ${requestId || 'N/A'}${provider ? `\nProvider: ${provider}` : ''}`
+    );
+
+    throw new ApiError(errorMessage, response.status, errorCode, requestId, api, provider);
   }
 
   if (isJson) {
@@ -172,3 +188,11 @@ export async function del<T>(
 
   return handleResponse<T>(response);
 }
+
+export const apiClient = {
+  get,
+  post,
+  put,
+  patch,
+  delete: del,
+};

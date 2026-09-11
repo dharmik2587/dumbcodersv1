@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const hackathonSourceSchema = z.enum([
   'unstop',
   'devfolio',
+  'hack2skill',
   'devpost',
   'mlh',
   'hackerearth',

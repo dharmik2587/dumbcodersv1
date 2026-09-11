@@ -2,6 +2,7 @@
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Inbox, Send, X, Loader2, MessageSquare } from "lucide-react";
@@ -165,6 +166,8 @@ function RequestCard({
   const withdrawRequest = useApiStore((s) => s.withdrawRequest);
   const pushToast = useApiStore((s) => s.pushToast);
   const me = useMe();
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const [acting, setActing] = useState(false);
 
   // Support both raw and joined shapes
@@ -202,11 +205,24 @@ function RequestCard({
     setActing(true);
     try {
       if (action === "accept") {
-        await acceptRequest(requestId);
+        const res = await acceptRequest(requestId);
+        await queryClient.invalidateQueries({ queryKey: ["requests"] });
+        await queryClient.invalidateQueries({ queryKey: ["requests", "received"] });
+        await queryClient.invalidateQueries({ queryKey: ["requests", "sent"] });
+        await queryClient.invalidateQueries({ queryKey: ["notifications"] });
+        if (res?.conversation?.id) {
+          router.push(`/messages?conversationId=${res.conversation.id}`);
+        }
       } else if (action === "reject") {
         await rejectRequest(requestId);
+        await queryClient.invalidateQueries({ queryKey: ["requests"] });
+        await queryClient.invalidateQueries({ queryKey: ["requests", "received"] });
+        await queryClient.invalidateQueries({ queryKey: ["notifications"] });
       } else {
         await withdrawRequest(requestId);
+        await queryClient.invalidateQueries({ queryKey: ["requests"] });
+        await queryClient.invalidateQueries({ queryKey: ["requests", "sent"] });
+        await queryClient.invalidateQueries({ queryKey: ["notifications"] });
       }
     } finally {
       setActing(false);

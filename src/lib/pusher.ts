@@ -25,6 +25,10 @@ export function getPusherServer(): Pusher | null {
   return pusherInstance;
 }
 
+export function isPusherConfigured(): boolean {
+  return getPusherServer() !== null;
+}
+
 export type PusherResult = 
   | { success: true } 
   | { success: false; error: unknown };

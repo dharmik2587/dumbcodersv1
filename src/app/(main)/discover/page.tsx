@@ -39,9 +39,13 @@ export default function Discover() {
   const [open, setOpen] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<"deadline" | "prize" | "demand">("deadline");
 
-  // Load hackathons on mount
+  // Load hackathons on mount and auto-refresh every 5 minutes from HackMate DB
   useEffect(() => {
     loadHackathons().then(() => setLoading(false));
+    const interval = setInterval(() => {
+      loadHackathons();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, [loadHackathons]);
 
   const q = params.get("q") ?? "";

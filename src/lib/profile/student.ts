@@ -1,6 +1,6 @@
 import { eq, or } from 'drizzle-orm';
 import { getCoreDb } from '@/lib/db/core';
-import { colleges, githubData, profiles, type Profile } from '@/lib/db/schema/core';
+import { colleges, githubData, profiles, socialAccounts, type Profile } from '@/lib/db/schema/core';
 import type { User } from '@supabase/supabase-js';
 import { usernameBase, usernameCandidate } from './username';
 
@@ -89,6 +89,14 @@ export async function ensureStudentProfile(user: User): Promise<Profile> {
   return created;
 }
 
+export interface PublicSocialAccount {
+  platform: string;
+  username: string | null;
+  displayName: string | null;
+  profileUrl: string | null;
+  isVerified: boolean;
+}
+
 /**
  * Look up a student by either their Supabase ID, username, or unique Student Code (HM-XXXXXX)
  */
@@ -108,5 +116,22 @@ export async function getStudentByAnyKey(identifier: string) {
     )
     .limit(1);
 
-  return rows[0] ?? null;
+  if (!rows[0]) return null;
+
+  const userSocials = await db
+    .select({
+      platform: socialAccounts.platform,
+      username: socialAccounts.username,
+      displayName: socialAccounts.displayName,
+      profileUrl: socialAccounts.profileUrl,
+      isVerified: socialAccounts.isVerified,
+    })
+    .from(socialAccounts)
+    .where(eq(socialAccounts.userId, rows[0].profile.id));
+
+  return {
+    ...rows[0],
+    socialAccounts: userSocials as PublicSocialAccount[],
+  };
 }
+

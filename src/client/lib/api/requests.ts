@@ -40,8 +40,20 @@ export async function sendCollabRequest(data: {
   return post<ApiResponse<DbRequest>>('/api/requests', data).then(res => res.data!);
 }
 
-export async function acceptRequest(id: string): Promise<void> {
-  return post(`/api/requests/${id}/accept`, {});
+export interface AcceptRequestResult {
+  request: DbRequest;
+  conversation: {
+    id: string;
+    otherUser?: {
+      id: string;
+      username: string;
+      fullName?: string | null;
+    };
+  };
+}
+
+export async function acceptRequest(id: string): Promise<AcceptRequestResult> {
+  return post<ApiResponse<AcceptRequestResult>>(`/api/requests/${id}/accept`, {}).then((res) => res.data!);
 }
 
 export async function rejectRequest(id: string): Promise<void> {

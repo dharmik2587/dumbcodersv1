@@ -2,6 +2,8 @@
 import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useSearchParams, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { PublicSocialsSection } from "@/components/profile/PublicSocialsSection";
 
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowLeft, Check, ChevronDown, Send, Sparkles, UserPlus } from "lucide-react";
@@ -600,6 +602,18 @@ function BuilderProfile() {
   const t = useChartTokens();
   const [composing, setComposing] = useState(false);
 
+  const profileQuery = useQuery({
+    queryKey: ['public-user-profile', id],
+    queryFn: async () => {
+      if (!id) return null;
+      const res = await fetch(`/api/users/${id}`);
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.data;
+    },
+    enabled: !!id,
+  });
+
   const b = builders.find((x) => x.id === id);
   if (!b)
     return (
@@ -784,6 +798,8 @@ function BuilderProfile() {
               })}
             </div>
           </Panel>
+
+          <PublicSocialsSection accounts={profileQuery.data?.socialAccounts ?? []} />
 
           <Panel>
             <div className="border-b border-line px-5 py-3">

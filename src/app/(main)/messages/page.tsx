@@ -37,12 +37,14 @@ function MessagesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialUserId = searchParams.get('userId');
+  const initialConversationId = searchParams.get('conversationId');
   const queryClient = useQueryClient();
 
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(initialConversationId);
   const [filter, setFilter] = useState('');
   const [messageText, setMessageText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const composerInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Fetch user conversations
   const { data: conversations, isLoading: loadingConversations } = useQuery<ConversationItem[]>({
@@ -55,6 +57,14 @@ function MessagesContent() {
     },
     refetchInterval: 5000,
   });
+
+  // Sync conversationId from query param
+  useEffect(() => {
+    if (initialConversationId) {
+      setActiveConversationId(initialConversationId);
+      setTimeout(() => composerInputRef.current?.focus(), 100);
+    }
+  }, [initialConversationId]);
 
   // 2. If ?userId= was passed, start or focus that conversation
   const startMutation = useMutation({
@@ -73,6 +83,7 @@ function MessagesContent() {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setActiveConversationId(data.id);
       router.replace('/messages');
+      setTimeout(() => composerInputRef.current?.focus(), 100);
     },
   });
 
@@ -82,12 +93,14 @@ function MessagesContent() {
     }
   }, [initialUserId, me?.id]);
 
-  // Default to first conversation if none selected
+  // Default to initialConversationId or first conversation if none selected
   useEffect(() => {
-    if (!activeConversationId && conversations && conversations.length > 0 && !initialUserId) {
+    if (initialConversationId) {
+      setActiveConversationId(initialConversationId);
+    } else if (!activeConversationId && conversations && conversations.length > 0 && !initialUserId) {
       setActiveConversationId(conversations[0].id);
     }
-  }, [conversations, activeConversationId, initialUserId]);
+  }, [conversations, activeConversationId, initialUserId, initialConversationId]);
 
   const activeConvo = conversations?.find((c) => c.id === activeConversationId);
 
@@ -309,10 +322,11 @@ function MessagesContent() {
                 )}
 
                 {!loadingMessages && (!messages || messages.length === 0) && (
-                  <div className="h-full flex flex-col items-center justify-center text-center text-muted">
-                    <MessageSquare size={32} className="opacity-30 mb-2" />
-                    <p className="text-xs font-medium">Say hello to {activeConvo.partnerName}!</p>
-                    <p className="font-mono text-[10px] text-subtle mt-0.5">End-to-end encrypted at rest via pgcrypto.</p>
+                  <div className="h-full flex flex-col items-center justify-center text-center text-muted p-6">
+                    <MessageSquare size={36} className="text-accent mb-3" />
+                    <p className="text-sm font-semibold text-foreground">You are now connected.</p>
+                    <p className="text-xs text-subtle mt-1">Start the conversation with {activeConvo.partnerName || activeConvo.partnerUsername}.</p>
+                    <p className="font-mono text-[10px] text-muted mt-2">End-to-end encrypted at rest via pgcrypto.</p>
                   </div>
                 )}
 
@@ -350,6 +364,7 @@ function MessagesContent() {
               <form onSubmit={handleSend} className="border-t border-line p-3 bg-raised/50">
                 <div className="flex gap-2">
                   <input
+                    ref={composerInputRef}
                     type="text"
                     value={messageText}
                     onChange={(e) => setMessageText(e.target.value)}
