@@ -69,6 +69,17 @@ export async function GET(request: Request) {
     } catch (e) {
       console.error('Failed to auto-provision Neon student profile on callback:', e);
     }
+
+    try {
+      const { syncUserSocialIdentities } = await import('@/lib/db/queries/social-accounts');
+      await syncUserSocialIdentities(user);
+    } catch (e) {
+      console.error('Failed to sync social identities on callback:', e);
+      const msg = e instanceof Error ? e.message : 'Social identity sync failed';
+      if (msg.includes('already connected')) {
+        return NextResponse.redirect(`${origin}/profile?error=${encodeURIComponent(msg)}`);
+      }
+    }
   }
 
   const forwardedHost = request.headers.get('x-forwarded-host'); // original origin before load balancer

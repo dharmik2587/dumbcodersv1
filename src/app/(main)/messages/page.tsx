@@ -125,10 +125,10 @@ function MessagesContent() {
     },
   });
 
-  // Pusher subscription for live incoming messages
+  // Pusher subscription for live incoming messages on private authenticated channel
   useEffect(() => {
     if (!me?.id) return;
-    const unsubscribe = subscribeChannel(`user-${me.id}`, 'direct-message', () => {
+    const unsubscribe = subscribeChannel(`private-user-${me.id}`, 'direct-message', () => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
       if (activeConversationId) {
         queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });

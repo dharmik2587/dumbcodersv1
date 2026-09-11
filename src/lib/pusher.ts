@@ -25,18 +25,37 @@ export function getPusherServer(): Pusher | null {
   return pusherInstance;
 }
 
-export async function triggerPusherEvent(channel: string, event: string, data: unknown) {
+export type PusherResult = 
+  | { success: true } 
+  | { success: false; error: unknown };
+
+export async function triggerPusherEvent(
+  channel: string, 
+  event: string, 
+  data: unknown
+): Promise<PusherResult> {
   const pusher = getPusherServer();
   if (!pusher) {
-    console.warn(`[Pusher] Skipped event "${event}" on "${channel}" — Pusher not configured`);
-    return null;
+    console.warn(`[Pusher] Skipped event "${event}" on channel "${channel}" — Pusher not configured`);
+    return { success: false, error: new Error('Pusher not configured') };
   }
 
   try {
-    const res = await pusher.trigger(channel, event, data);
-    return res;
+    console.log(`[Pusher] Triggering event "${event}" on channel "${channel}"`);
+    await pusher.trigger(channel, event, data);
+    console.log(`[Pusher] Successfully delivered event "${event}" on channel "${channel}"`);
+    return { success: true };
   } catch (err) {
-    console.error(`[Pusher] Failed to trigger event "${event}" on "${channel}":`, err);
-    return null;
+    console.error(`[Pusher] Failed to trigger event "${event}" on channel "${channel}":`, err);
+    return { success: false, error: err };
   }
 }
+
+export function authorizeChannel(socketId: string, channelName: string) {
+  const pusher = getPusherServer();
+  if (!pusher) {
+    throw new Error('Pusher not configured');
+  }
+  return pusher.authorizeChannel(socketId, channelName);
+}
+

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { requireUserId } from '@/lib/auth/server';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { failure, success } from '@/lib/http';
-import { listConversationMessages, sendDirectMessage } from '@/lib/db/queries/messages';
+import { createOutboxEvent, listConversationMessages, sendDirectMessage } from '@/lib/db/queries/messages';
 import { triggerPusherEvent } from '@/lib/pusher';
 
 const sendMessageSchema = z.object({
@@ -63,14 +63,38 @@ export async function POST(
       parsed.data.content
     );
 
-    // Notify recipient via Pusher
-    void triggerPusherEvent(`user-${recipientId}`, 'direct-message', {
+    // Notify recipient via Pusher on private authorized channel
+    const pusherChannel = `private-user-${recipientId}`;
+    const pusherPayload = {
+      messageId: message.id,
       conversationId,
       senderId: userId,
-      messageId: message.id,
-      createdAt: message.createdAt,
-    });
+      content: message.content,
+      createdAt: message.createdAt instanceof Date ? message.createdAt.toISOString() : message.createdAt,
+    };
 
+    const pusherResult = await triggerPusherEvent(pusherChannel, 'direct-message', pusherPayload);
+
+    // Write to outbox_events to guarantee auditability and retry capability
+    try {
+      await createOutboxEvent({
+        eventType: 'pusher.dm',
+        aggregateType: 'direct_message',
+        aggregateId: message.id,
+        payload: {
+          channel: pusherChannel,
+          event: 'direct-message',
+          data: pusherPayload,
+        },
+        status: pusherResult.success ? 'processed' : 'pending',
+        attempts: 1,
+        processedAt: pusherResult.success ? new Date() : null,
+      });
+    } catch (outboxError) {
+      console.error('[DM Outbox] Failed to record outbox event:', outboxError);
+    }
+
+    // Always return HTTP 201 as message is safely committed to Postgres
     return success(message, { status: 201 });
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Failed to send message';
@@ -78,3 +102,4 @@ export async function POST(
     return failure('INTERNAL_ERROR', msg, status);
   }
 }
+

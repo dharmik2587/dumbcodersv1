@@ -24,6 +24,7 @@ import { CLUSTER_NAME, CLUSTER_ORDER } from "@/client/data/seed";
 import { cn } from "@/client/utils/cn";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { SocialAccountsSection } from "@/components/profile/SocialAccountsSection";
 
 export default function Profile() {
   const initialMe = useMe();
@@ -348,6 +349,10 @@ export default function Profile() {
                 ))}
               </div>
             </Panel>
+          </Reveal>
+
+          <Reveal delay={200}>
+            <SocialAccountsSection />
           </Reveal>
         </div>
 

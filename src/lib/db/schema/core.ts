@@ -448,6 +448,49 @@ export const connectedAccounts = pgTable(
   }),
 );
 
+export const SOCIAL_PLATFORMS = [
+  'github',
+  'discord',
+  'linkedin',
+  'telegram',
+  'portfolio',
+  'x',
+  'devto',
+  'kaggle',
+  'codeforces',
+  'stackoverflow',
+] as const;
+
+export type SocialPlatform = (typeof SOCIAL_PLATFORMS)[number];
+
+export const socialAccounts = pgTable(
+  'social_accounts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => profiles.id, { onDelete: 'cascade' }),
+    platform: text('platform').$type<SocialPlatform>().notNull(),
+    username: text('username'),
+    displayName: text('display_name'),
+    profileUrl: text('profile_url'),
+    providerUserId: text('provider_user_id'),
+    isVerified: boolean('is_verified').notNull().default(false),
+    verifiedAt: timestamp('verified_at', { withTimezone: true }),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index('social_accounts_user_idx').on(table.userId),
+    userPlatformUnique: uniqueIndex('social_accounts_user_platform_idx').on(table.userId, table.platform),
+    providerIdentityUnique: uniqueIndex('social_accounts_provider_identity_idx').on(
+      table.platform,
+      table.providerUserId,
+    ),
+  }),
+);
+
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
 export type College = typeof colleges.$inferSelect;
@@ -455,6 +498,8 @@ export type GithubData = typeof githubData.$inferSelect;
 export type LeetcodeData = typeof leetcodeData.$inferSelect;
 export type ConnectedAccount = typeof connectedAccounts.$inferSelect;
 export type NewConnectedAccount = typeof connectedAccounts.$inferInsert;
+export type SocialAccount = typeof socialAccounts.$inferSelect;
+export type NewSocialAccount = typeof socialAccounts.$inferInsert;
 export type Hackathon = typeof hackathons.$inferSelect;
 export type HackathonSource = typeof hackathonSources.$inferSelect;
 export type Team = typeof teams.$inferSelect;
@@ -464,3 +509,4 @@ export type Notification = typeof notifications.$inferSelect;
 export type TeamMessage = typeof teamMessages.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type DirectMessage = typeof directMessages.$inferSelect;
+

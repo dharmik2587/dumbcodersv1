@@ -1,6 +1,6 @@
 import { and, desc, eq, or, sql } from 'drizzle-orm';
 import { getCoreDb } from '../core';
-import { conversations, directMessages, profiles } from '../schema/core';
+import { conversations, directMessages, outboxEvents, profiles } from '../schema/core';
 import { sqlDecrypt, sqlEncrypt } from '@/lib/crypto';
 
 export interface ConversationWithParticipant {
@@ -54,18 +54,73 @@ export async function getOrCreateConversation(user1Id: string, user2Id: string) 
     return existing[0];
   }
 
-  const [created] = await db
-    .insert(conversations)
+  try {
+    const [created] = await db
+      .insert(conversations)
+      .values({
+        userAId,
+        userBId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing()
+      .returning();
+
+    if (created) {
+      return created;
+    }
+  } catch {
+    // Unique collision handled by fallback fetch
+  }
+
+  const [fallback] = await db
+    .select()
+    .from(conversations)
+    .where(and(eq(conversations.userAId, userAId), eq(conversations.userBId, userBId)))
+    .limit(1);
+
+  if (!fallback) {
+    throw new Error('Failed to retrieve conversation after collision.');
+  }
+
+  return fallback;
+}
+
+export async function createOutboxEvent({
+  eventType,
+  aggregateType,
+  aggregateId,
+  payload,
+  status = 'pending',
+  attempts = 0,
+  processedAt = null,
+}: {
+  eventType: string;
+  aggregateType: string;
+  aggregateId: string;
+  payload: Record<string, unknown>;
+  status?: string;
+  attempts?: number;
+  processedAt?: Date | null;
+}) {
+  const db = getCoreDb();
+  const [event] = await db
+    .insert(outboxEvents)
     .values({
-      userAId,
-      userBId,
+      eventType,
+      aggregateType,
+      aggregateId,
+      payload,
+      status,
+      attempts,
+      availableAt: new Date(),
+      processedAt,
       createdAt: new Date(),
-      updatedAt: new Date(),
     })
     .returning();
-
-  return created;
+  return event;
 }
+
 
 /**
  * Lists all conversations for a user with participant profiles and latest messages.

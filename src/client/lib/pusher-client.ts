@@ -14,6 +14,10 @@ export function getPusherClient(): PusherClient | null {
     client = new PusherClient(key, {
       cluster,
       forceTLS: true,
+      channelAuthorization: {
+        endpoint: '/api/pusher/auth',
+        transport: 'ajax',
+      },
     });
     return client;
   } catch (err) {
@@ -22,20 +26,24 @@ export function getPusherClient(): PusherClient | null {
   }
 }
 
-export function subscribeChannel<T = unknown>(channelName: string, eventName: string, callback: (data: T) => void) {
+export function subscribeChannel<T = unknown>(
+  channelName: string,
+  eventName: string,
+  callback: (data: T) => void
+) {
   const pusher = getPusherClient();
   if (!pusher) return () => {};
 
   try {
-    const channel = pusher.subscribe(channelName);
+    const channel = pusher.channel(channelName) || pusher.subscribe(channelName);
     channel.bind(eventName, callback);
 
     return () => {
       channel.unbind(eventName, callback);
-      pusher.unsubscribe(channelName);
     };
   } catch (err) {
     console.warn(`[PusherClient] Sub error on ${channelName}:`, err);
     return () => {};
   }
 }
+
