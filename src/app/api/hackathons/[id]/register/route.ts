@@ -19,6 +19,15 @@ export async function GET(
     const targetUrl = hackathon.registrationUrl || hackathon.sourceUrl;
     if (!targetUrl) return failure('NOT_FOUND', 'No registration URL available for this hackathon.', 404);
 
+    try {
+      const parsedUrl = new URL(targetUrl);
+      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+        return failure('BAD_REQUEST', 'Invalid registration URL scheme.', 400);
+      }
+    } catch (e) {
+      return failure('BAD_REQUEST', 'Malformed registration URL.', 400);
+    }
+
     return NextResponse.redirect(targetUrl, 302);
   } catch (error) {
     console.error('GET /api/hackathons/[id]/register failed', error);

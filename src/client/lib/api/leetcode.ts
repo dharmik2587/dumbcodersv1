@@ -48,9 +48,11 @@ export async function connectLeetcode(username: string): Promise<LeetcodeConnect
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username }),
   });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.message || data.error || 'Failed to connect LeetCode');
+  const json = await res.json();
+  const data = json.data || json; // Handle new withApiHandler shape or fallback
+  
+  if (!res.ok || json.error) {
+    throw new Error(json.error?.message || data.message || data.error || 'Failed to connect LeetCode');
   }
   return data;
 }

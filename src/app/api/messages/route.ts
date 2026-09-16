@@ -9,38 +9,25 @@ const startConversationSchema = z.object({
   recipientId: z.string().min(1, 'recipientId is required'),
 });
 
-export async function GET() {
-  let userId: string;
-  try {
-    userId = await requireUserId();
-  } catch {
-    return failure('UNAUTHORIZED', 'Sign in to continue.', 401);
-  }
+import { withApiHandler } from '@/lib/api/with-api-handler';
 
-  try {
-    const conversations = await listUserConversations(userId);
+export const GET = withApiHandler(
+  { api: 'messages', requireAuth: true },
+  async ({ userId }) => {
+    const conversations = await listUserConversations(userId!);
     return success(conversations);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Failed to fetch conversations';
-    return failure('INTERNAL_ERROR', msg, 500);
   }
-}
+);
 
-export async function POST(request: NextRequest) {
-  let userId: string;
-  try {
-    userId = await requireUserId();
-  } catch {
-    return failure('UNAUTHORIZED', 'Sign in to continue.', 401);
-  }
+export const POST = withApiHandler(
+  { api: 'messages', operation: 'startConversation', requireAuth: true },
+  async ({ req, userId }) => {
+    const rateCheck = await enforceRateLimit(`msg:start:${userId}`, 20, 60);
+    if (!rateCheck.success) {
+      return rateCheck.response!;
+    }
 
-  const rateCheck = await enforceRateLimit(`msg:start:${userId}`, 20, 60);
-  if (!rateCheck.success) {
-    return rateCheck.response!;
-  }
-
-  try {
-    const body = await request.json().catch(() => null);
+    const body = await req.json().catch(() => null);
     const parsed = startConversationSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -51,10 +38,7 @@ export async function POST(request: NextRequest) {
       return failure('BAD_REQUEST', 'Cannot start a conversation with yourself.', 400);
     }
 
-    const conversation = await getOrCreateConversation(userId, parsed.data.recipientId);
+    const conversation = await getOrCreateConversation(userId!, parsed.data.recipientId);
     return success(conversation, { status: 201 });
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Failed to initialize conversation';
-    return failure('INTERNAL_ERROR', msg, 500);
   }
-}
+);

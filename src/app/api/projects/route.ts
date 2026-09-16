@@ -6,14 +6,15 @@ import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 
-export async function POST(req: NextRequest) {
-  let userId: string;
-  try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
+import { withApiHandler } from '@/lib/api/with-api-handler';
+import { AppError } from '@/lib/api/errors';
 
-  const rl = await enforceRateLimit(`project-create:${userId}`, 10, 60);
-  if (!rl.success && rl.response) return rl.response;
+export const POST = withApiHandler(
+  { api: 'projects', operation: 'createProject', requireAuth: true },
+  async ({ req, userId }) => {
+    const rl = await enforceRateLimit(`project-create:${userId}`, 10, 60);
+    if (!rl.success && rl.response) return rl.response;
 
-  try {
     const body = await req.json();
     const { teamId, name, description } = body;
 
@@ -21,34 +22,34 @@ export async function POST(req: NextRequest) {
       return failure('BAD_REQUEST', 'Team ID and Name are required.', 400);
     }
 
-    const project = await createProject(teamId, name, description, userId);
-    return success(project);
-  } catch (error: any) {
-    if (error.message?.includes('Unauthorized')) {
-      return failure('FORBIDDEN', 'You do not have permission to perform this action.', 403);
+    try {
+      const project = await createProject(teamId, name, description, userId!);
+      return success(project);
+    } catch (error: any) {
+      if (error.message?.includes('Unauthorized')) {
+        throw new AppError('You do not have permission to perform this action.', { code: 'FORBIDDEN', statusCode: 403 });
+      }
+      throw error;
     }
-    console.error('POST /api/projects failed:', error);
-    return failure('INTERNAL_ERROR', 'Failed to create project. Please try again.', 500);
   }
-}
+);
 
-export async function GET(req: NextRequest) {
-  let userId: string;
-  try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
+export const GET = withApiHandler(
+  { api: 'projects', requireAuth: true },
+  async ({ req, userId }) => {
+    const url = new URL(req.url);
+    const teamId = url.searchParams.get('teamId');
 
-  const url = new URL(req.url);
-  const teamId = url.searchParams.get('teamId');
+    if (!teamId) return failure('BAD_REQUEST', 'Missing teamId', 400);
 
-  if (!teamId) return failure('BAD_REQUEST', 'Missing teamId', 400);
-
-  try {
-    const projects = await listProjectsForTeam(teamId, userId);
-    return success(projects);
-  } catch (error: any) {
-    if (error.message?.includes('Unauthorized')) {
-      return failure('FORBIDDEN', 'You do not have permission to view these projects.', 403);
+    try {
+      const projects = await listProjectsForTeam(teamId, userId!);
+      return success(projects);
+    } catch (error: any) {
+      if (error.message?.includes('Unauthorized')) {
+        throw new AppError('You do not have permission to view these projects.', { code: 'FORBIDDEN', statusCode: 403 });
+      }
+      throw error;
     }
-    console.error('GET /api/projects failed:', error);
-    return failure('INTERNAL_ERROR', 'Failed to list projects. Please try again.', 500);
   }
-}
+);

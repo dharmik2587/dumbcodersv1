@@ -8,7 +8,7 @@ HackMate is the premier hackathon teammate matching and collaboration workspace 
 - **Authentication**: Supabase Auth (SSR Cookie Session Management, JWT verification, Email Confirmation & Password Recovery, OAuth with GitHub/Google). Strictly no Clerk.
 - **Database**: Single Neon PostgreSQL database (`@neondatabase/serverless`) managed with Drizzle ORM.
 - **Security & Cryptography**:
-  - Row Level Security (RLS) enabled on all tables.
+  - Row Level Security (RLS) is defined in schema migrations, but currently bypassed as the app connects directly via `CORE_DATABASE_URL` (as owner). The Next.js API route handler layer is the enforced security boundary.
   - Chat & direct messages encrypted at rest using PostgreSQL `pgcrypto` (`safe_encrypt_text` / `safe_decrypt_text`).
   - Strict input validation via Zod on all route handlers.
   - Zero literal secrets in codebase; timing-safe HMAC authentication for ingestion pipelines.

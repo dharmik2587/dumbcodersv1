@@ -9,7 +9,7 @@ BEGIN
   END IF;
   RETURN encode(pgp_sym_encrypt(plaintext, key), 'base64');
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$ LANGUAGE plpgsql VOLATILE;
 
 CREATE OR REPLACE FUNCTION safe_decrypt_text(ciphertext text, key text) RETURNS text AS $$
 BEGIN
@@ -19,7 +19,7 @@ BEGIN
   BEGIN
     RETURN pgp_sym_decrypt(decode(ciphertext, 'base64'), key);
   EXCEPTION WHEN OTHERS THEN
-    RETURN ciphertext;
+    RETURN NULL;
   END;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;

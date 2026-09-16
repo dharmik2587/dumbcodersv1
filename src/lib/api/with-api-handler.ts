@@ -22,7 +22,7 @@ export function withApiHandler<P = unknown>(
   meta: ApiHandlerMeta,
   handler: (ctx: ApiContext<P>) => Promise<Response>
 ) {
-  return async (req: NextRequest, context?: { params?: Promise<P> }): Promise<Response> => {
+  return async (req: NextRequest, context: any): Promise<Response> => {
     const startTime = Date.now();
     const requestId = getRequestId(req);
     const params = context?.params ?? (Promise.resolve({}) as Promise<P>);

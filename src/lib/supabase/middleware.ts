@@ -50,5 +50,17 @@ export async function updateSession(request: NextRequest) {
     '/api',
   ];
 
+  const isPublicRoute = publicPrefixes.some((prefix) => 
+    request.nextUrl.pathname === prefix || request.nextUrl.pathname.startsWith(`${prefix}/`)
+  );
+
+  // If no user and the route is not public, redirect to sign-in
+  if (!user && !isPublicRoute) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = '/sign-in';
+    redirectUrl.searchParams.set('next', request.nextUrl.pathname);
+    return NextResponse.redirect(redirectUrl);
+  }
+
   return supabaseResponse;
 }
