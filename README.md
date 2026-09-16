@@ -15,7 +15,8 @@ HackMate is the premier hackathon teammate matching and collaboration workspace 
 - **Rate Limiting**: Unified Upstash Redis sliding-window limiter with graceful in-memory fallback.
 - **State & Real-time**:
   - TanStack React Query (client cache, optimistic UI updates with rollback).
-  - Zustand (global builder & session store).
+  - Next.js Native Fetch for server-state caching and Server Components.
+  - Zustand (global builder & session store, seed data management).
   - Pusher Channels (real-time chat, direct messaging, and presence indicators).
 - **Styling**: Tailwind CSS with custom cyber-terminal design tokens, Google Fonts typography, Framer Motion page transitions, and accessible UI primitives.
 
@@ -28,7 +29,8 @@ HackMate is the premier hackathon teammate matching and collaboration workspace 
 - Node.js 20+
 - pnpm 9+ or 10+
 - Neon PostgreSQL connection string (`DATABASE_URL` / `CORE_DATABASE_URL`)
-- Supabase project (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`)
+- Supabase project (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
+- `MESSAGE_ENCRYPTION_KEY` (strict requirement: exactly 64-character hex string for 32 bytes)
 
 ### Environment Configuration
 
@@ -49,9 +51,11 @@ NEXT_PUBLIC_SUPABASE_URL=https://xyz.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-# Encryption Key (for chat & messages at rest)
-MESSAGE_ENCRYPTION_KEY=your-secure-32-byte-hex-or-secret
+# Encryption Key (REQUIRED: 64-character hex string for chat & messages at rest)
+MESSAGE_ENCRYPTION_KEY=1e53b1c429a3b7396b64160630d284cb09c746c9439dee3de634650e1300973a
 
+# OpenAI API Key (Required for AI Roadmap generation feature)
+OPENAI_API_KEY=sk-proj-...
 # Pusher Channels
 NEXT_PUBLIC_PUSHER_KEY=your-pusher-key
 NEXT_PUBLIC_PUSHER_CLUSTER=ap2
@@ -121,3 +125,8 @@ pnpm db:seed
 6. **Competitive Leaderboard**:
    - Composite score derived from GitHub repos, commits, LeetCode solved problems, contest ratings, and hackathon results.
    - Global, college-level, and batch filtering.
+
+7. **AI-Powered Project Roadmaps**:
+   - Dual-path state management supporting both real database state and local seed data.
+   - Progress-aware roadmap generation using OpenAI (`gpt-4o-mini`).
+   - Zod validation for robust and safe JSON ingestion of generated checklists.
