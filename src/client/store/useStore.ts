@@ -69,6 +69,7 @@ type State = {
   toggleChecklist: (projectId: string, id: string) => void;
   appendLog: (projectId: string, label: string) => void;
   setNotes: (projectId: string, notes: string) => void;
+  addProject: (teamId: string, hackathonId: string | null, name: string) => string;
   readNotification: (id: string) => void;
   readAllNotifications: () => void;
   setPref: (k: keyof State["prefs"], v: boolean) => void;
@@ -279,6 +280,25 @@ export const useStore = create<State>()(
         set((s) => ({
           projects: s.projects.map((p) => (p.id === projectId ? { ...p, notes } : p)),
         })),
+
+      addProject: (teamId, hackathonId, name) => {
+        const id = "proj-" + Math.random().toString(36).slice(2, 9);
+        const newProj = {
+          id,
+          teamId,
+          hackathonId: hackathonId || "h-xyz",
+          name,
+          submissionAt: new Date(Date.now() + 86400000 * 3).toISOString(),
+          tasks: [],
+          checklist: [],
+          log: [],
+          commitsByDay: [0, 0, 0, 0, 0, 0, 0],
+          commitCount: 0,
+          notes: "",
+        };
+        set((s) => ({ projects: [...s.projects, newProj] }));
+        return id;
+      },
 
       readNotification: (id) =>
         set((s) => ({

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -346,6 +346,10 @@ export default function ProjectWorkspace() {
             </Panel>
           </Reveal>
 
+          <Reveal delay={120}>
+            <AIRoadmapPanel teamId={project.teamId} projectName={project.name} description={project.notes} />
+          </Reveal>
+
           <Reveal delay={140}>
             <Panel>
               <div className="flex items-center justify-between border-b border-line px-5 py-3">
@@ -438,5 +442,150 @@ function TaskCard({
         <span className="font-mono text-[9px] tnum text-fg3">{task.id}</span>
       </div>
     </motion.div>
+  );
+}
+
+function AIRoadmapPanel({ teamId, projectName, description }: { teamId: string, projectName: string, description: string }) {
+  const pushToast = useApiStore((s) => s.pushToast);
+  const [dbProject, setDbProject] = useState<any>(null);
+  const [roadmap, setRoadmap] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      try {
+        let res = await fetch(`/api/projects?teamId=${teamId}`);
+        if (!res.ok) throw new Error('Failed to fetch projects');
+        let data = await res.json();
+        let proj = data.data?.find((p: any) => p.name === projectName);
+        
+        if (!proj) {
+          const createRes = await fetch('/api/projects', {
+            method: 'POST',
+            body: JSON.stringify({ teamId, name: projectName, description })
+          });
+          if (createRes.ok) {
+            const createData = await createRes.json();
+            proj = createData.data;
+          }
+        }
+        
+        if (proj) {
+          setDbProject(proj);
+          const detailRes = await fetch(`/api/projects/${proj.id}`);
+          if (detailRes.ok) {
+            const detailData = await detailRes.json();
+            setRoadmap(detailData.data?.roadmap);
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [teamId, projectName, description]);
+
+  const regenerate = async () => {
+    if (!dbProject) return;
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/projects/${dbProject.id}/roadmap`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to generate');
+      setRoadmap(data.data);
+      pushToast({ label: 'Roadmap Generated', body: `Version ${data.data.version} created`, tone: 'good' });
+    } catch (err: any) {
+      pushToast({ label: 'Generation failed', body: err.message, tone: 'bad' });
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const toggleStep = async (stepId: string, done: boolean) => {
+    if (!dbProject) return;
+    
+    setRoadmap((prev: any) => ({
+      ...prev,
+      steps: prev.steps.map((s: any) => s.id === stepId ? { ...s, done } : s)
+    }));
+
+    try {
+      const res = await fetch(`/api/projects/${dbProject.id}/roadmap`, {
+        method: 'PATCH',
+        body: JSON.stringify({ stepId, done })
+      });
+      if (!res.ok) throw new Error('Failed to update step');
+    } catch (err: any) {
+      pushToast({ label: 'Update failed', body: err.message, tone: 'bad' });
+      setRoadmap((prev: any) => ({
+        ...prev,
+        steps: prev.steps.map((s: any) => s.id === stepId ? { ...s, done: !done } : s)
+      }));
+    }
+  };
+
+  const steps = roadmap?.steps || [];
+  const doneCount = steps.filter((s: any) => s.done).length;
+
+  return (
+    <Panel>
+      <div className="flex items-center justify-between border-b border-line px-5 py-3">
+        <div className="flex items-center gap-2">
+          <Label tone="accent">✨ AI Roadmap</Label>
+          {roadmap && <span className="font-mono text-[9px] text-fg3 uppercase tracking-wider bg-raised px-1.5 py-0.5 border border-line">v{roadmap.version}</span>}
+        </div>
+        <span className="font-mono text-[10px] tnum text-fg3">
+          {steps.length > 0 ? `${doneCount} of ${steps.length}` : 'Not generated'}
+        </span>
+      </div>
+      
+      <div className="p-5">
+        {loading ? (
+          <div className="animate-pulse space-y-3">
+            <div className="h-4 bg-line rounded w-3/4"></div>
+            <div className="h-4 bg-line rounded w-1/2"></div>
+            <div className="h-4 bg-line rounded w-5/6"></div>
+          </div>
+        ) : steps.length > 0 ? (
+          <>
+            <div className="mb-4">
+              <Meter value={(doneCount / steps.length) * 100} tone={doneCount === steps.length ? 'mint' : 'accent'} />
+            </div>
+            <div className="space-y-2.5">
+              {steps.sort((a: any, b: any) => a.order - b.order).map((step: any) => (
+                <button
+                  key={step.id}
+                  onClick={() => toggleStep(step.id, !step.done)}
+                  className="group flex w-full items-center justify-between gap-4 text-left"
+                >
+                  <span className={cn("text-[12.5px] transition-colors", step.done ? "text-fg3 line-through" : "text-fg")}>
+                    {step.order}. {step.label}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <StateDot tone={step.done ? "mint" : "amber"} />
+                  </span>
+                </button>
+              ))}
+            </div>
+            <div className="mt-6 pt-4 border-t border-line text-center">
+              <Button onClick={regenerate} disabled={generating} variant="outline" className="w-full text-xs">
+                {generating ? 'Generating...' : '✨ Regenerate Roadmap'}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="text-center py-6">
+            <p className="text-[12.5px] text-fg3 mb-4">No roadmap generated yet.</p>
+            <Button onClick={regenerate} disabled={generating}>
+              {generating ? 'Generating...' : '✨ Generate AI Roadmap'}
+            </Button>
+          </div>
+        )}
+      </div>
+    </Panel>
   );
 }

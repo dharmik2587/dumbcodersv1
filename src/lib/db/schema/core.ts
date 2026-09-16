@@ -491,6 +491,40 @@ export const socialAccounts = pgTable(
   }),
 );
 
+export const projects = pgTable(
+  'projects',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    teamId: uuid('team_id').notNull().references(() => teams.id, { onDelete: 'cascade' }),
+    hackathonId: uuid('hackathon_id').references(() => hackathons.id, { onDelete: 'set null' }),
+    name: text('name').notNull(),
+    description: text('description'),
+    createdBy: text('created_by').references(() => profiles.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    teamIdx: index('projects_team_idx').on(table.teamId),
+  }),
+);
+
+export const projectRoadmaps = pgTable(
+  'project_roadmaps',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    projectId: uuid('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull().default(1),
+    steps: jsonb('steps').$type<Array<{ id: string; label: string; done: boolean; order: number }>>().notNull().default([]),
+    generatedBy: text('generated_by'),
+    generatedAt: timestamp('generated_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    projectIdx: index('project_roadmaps_project_idx').on(table.projectId),
+  }),
+);
+
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
 export type College = typeof colleges.$inferSelect;
@@ -509,4 +543,6 @@ export type Notification = typeof notifications.$inferSelect;
 export type TeamMessage = typeof teamMessages.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type DirectMessage = typeof directMessages.$inferSelect;
+export type Project = typeof projects.$inferSelect;
+export type ProjectRoadmap = typeof projectRoadmaps.$inferSelect;
 

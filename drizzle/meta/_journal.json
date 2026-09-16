@@ -36,6 +36,13 @@
       "when": 1788072180222,
       "tag": "0004_thick_retro_girl",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1789554465812,
+      "tag": "0005_blue_silver_fox",
+      "breakpoints": true
     }
   ]
 }

@@ -91,7 +91,7 @@ function MessagesContent() {
     if (initialUserId && me?.id && initialUserId !== me.id) {
       startMutation.mutate(initialUserId);
     }
-  }, [initialUserId, me?.id]);
+  }, [initialUserId, me?.id, startMutation]);
 
   // Default to initialConversationId or first conversation if none selected
   useEffect(() => {

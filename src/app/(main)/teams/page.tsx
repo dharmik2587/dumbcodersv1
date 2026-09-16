@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Send, X, Loader2 } from "lucide-react";
 import { byIdMap, useMe, useApiStore } from "@/client/store/apiStore";
 import { ROLE_LABEL, type RoleKey, ROLES } from "@/client/types";
+import { useStore } from "@/client/store/useStore";
 import { teamCoverage } from "@/client/lib/matching";
 import { Avatar, CoverageHead, CoverageMatrix, CoverageLegend, relTime, roleTone } from "@/components/shared";
 import {
@@ -384,10 +385,19 @@ function TeamWorkspace() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <CoverageHead coverage={cov} />
-          {project && (
+          {project ? (
             <Link href={`/projects/${project.id}`}>
               <Button variant="outline" size="sm">Open project</Button>
             </Link>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => {
+              const name = prompt("Project Name:", `${team.name} Project`);
+              if (name) {
+                const addProject = useStore.getState().addProject;
+                const id = addProject(team.id, team.hackathonId || null, name);
+                window.location.href = `/projects/${id}`;
+              }
+            }}>+ New Project</Button>
           )}
           <Link href={`/match?hackathon=${team.hackathonId}`}>
             <Button size="sm">Fill a gap</Button>

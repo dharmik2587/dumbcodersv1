@@ -54,9 +54,9 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { interests = ['hello'], title = 'Hello', message = 'Hello from HackMate!' } = body;
+    const { title = 'Hello', message = 'Hello from HackMate!' } = body;
 
-    const result = await publishBeamsNotification(interests, {
+    const result = await publishBeamsNotification([`user-${userId}`], {
       title,
       body: message,
     });

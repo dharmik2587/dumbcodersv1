@@ -14,7 +14,8 @@
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
     "db:seed": "node --env-file=.env.local --import=tsx src/lib/db/seed/index.ts",
-    "hackathons:load": "python3 backend/features/hackathon_loader/hackathon_loader_1.py --sync"
+    "hackathons:load": "python3 backend/features/hackathon_loader/hackathon_loader_1.py --sync",
+    "sync:hackathons": "npx tsx scripts/sync-all-hackathons.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

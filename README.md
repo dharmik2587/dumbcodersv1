@@ -108,10 +108,16 @@ pnpm db:seed
    - Secure encrypted conversations between builders (`/messages`).
    - Real-time message synchronization with read receipts.
 
-4. **Hackathon Aggregator**:
-   - Automated ingestion pipeline for verified hackathons (`/api/internal/ingest/hackathons`).
+4. **Hackathon Aggregator (Multi-Provider)**:
+   - Unified ingestion pipeline syncing hackathons from Unstop, Devfolio, and Hack2Skill via `npx tsx scripts/sync-all-hackathons.ts`.
+   - Deterministic canonicalization and deduplication across providers.
    - Bookmark, interest tracking, and calendar deadline countdowns.
 
-5. **Competitive Leaderboard**:
+5. **API Observability & Hardening**:
+   - Centralized `withApiHandler` pipeline logging operations, errors, and performance.
+   - Secure error mapping (does not leak Postgres traces to client).
+   - Rate limiting and standard HTTP `X-Request-ID` tracing.
+
+6. **Competitive Leaderboard**:
    - Composite score derived from GitHub repos, commits, LeetCode solved problems, contest ratings, and hackathon results.
    - Global, college-level, and batch filtering.

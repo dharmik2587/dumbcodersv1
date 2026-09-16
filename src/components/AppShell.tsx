@@ -625,6 +625,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="border-t border-line p-3">
+          {!collapsed && (
+            <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 px-2.5 font-mono text-[10px] text-fg3 uppercase tracking-wider">
+              <Link href="/about" className="hover:text-fg">About</Link>
+              <Link href="/privacy" className="hover:text-fg">Privacy</Link>
+              <Link href="/terms" className="hover:text-fg">Terms</Link>
+            </div>
+          )}
           <Link
             href="/profile"
             className={cn(
