@@ -156,9 +156,9 @@ export default function HackathonDetail() {
             </Button>
           </Link>
           {h.registrationUrl && (
-            <a href={h.registrationUrl} target="_blank" rel="noopener noreferrer">
+            <a href={`/api/hackathons/${h.id}/register`} target="_blank" rel="noopener noreferrer">
               <Button variant="primary">
-                Register on Platform
+                Register on {h.source === 'devfolio' ? 'Devfolio' : h.source === 'hack2skill' ? 'Hack2Skill' : h.source === 'unstop' ? 'Unstop' : 'Platform'}
               </Button>
             </a>
           )}

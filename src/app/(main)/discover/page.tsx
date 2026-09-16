@@ -459,7 +459,7 @@ function EventRow({
                 >
                   <Button variant="primary" size="sm" className="mt-2 w-full group">
                     <ExternalLink size={12} className="transition-transform group-hover:translate-x-0.5" />
-                    Register on Unstop
+                    Register on {h.source === 'devfolio' ? 'Devfolio' : h.source === 'hack2skill' ? 'Hack2Skill' : h.source === 'unstop' ? 'Unstop' : 'Platform'}
                   </Button>
                 </a>
               )}

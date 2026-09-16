@@ -19,6 +19,7 @@ type DetailResponse = {
     themes: string[];
     techStack: string[];
     prizeDisplay: string | null;
+    source?: string | null;
   };
   bookmarked: boolean;
   interested: boolean;
@@ -209,12 +210,21 @@ export function HackathonDetail({ id }: { id: string }) {
           <div className="border-t border-line/60 pt-4 space-y-2.5">
             {hackathon.registrationUrl ? (
               <a
-                href={hackathon.registrationUrl}
+                href={`/api/hackathons/${hackathon.id}/register`}
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center justify-center gap-2 w-full rounded-xl bg-accent p-3 text-xs font-semibold text-black transition-all hover:opacity-90 active:scale-95"
               >
-                <span>Register on Portal</span>
+                <span>
+                  Register on{' '}
+                  {hackathon.source === 'devfolio'
+                    ? 'Devfolio'
+                    : hackathon.source === 'hack2skill'
+                    ? 'Hack2Skill'
+                    : hackathon.source === 'unstop'
+                    ? 'Unstop'
+                    : 'Portal'}
+                </span>
                 <ExternalLink size={13} />
               </a>
             ) : (

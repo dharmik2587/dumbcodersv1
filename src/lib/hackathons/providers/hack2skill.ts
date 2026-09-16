@@ -1,5 +1,6 @@
 import type { HackathonProvider, NormalizedHackathon, ProviderHealth } from './types';
 
+const HACK2SKILL_PUBLIC_API = 'https://hack2skill.com/api/v1/innovator/public/event/public-list';
 const HACK2SKILL_BASE_URL = 'https://hack2skill.com';
 
 export class Hack2SkillProvider implements HackathonProvider {
@@ -7,13 +8,13 @@ export class Hack2SkillProvider implements HackathonProvider {
 
   async healthCheck(): Promise<ProviderHealth> {
     const start = Date.now();
-    const feedUrl = process.env.HACK2SKILL_FEED_URL || `${HACK2SKILL_BASE_URL}/hackathons`;
+    const feedUrl = process.env.HACK2SKILL_FEED_URL || `${HACK2SKILL_PUBLIC_API}?records=1&page=1`;
 
     try {
       const res = await fetch(feedUrl, {
         headers: {
           'User-Agent': 'HackMate/1.0',
-          Accept: 'application/json, text/html',
+          Accept: 'application/json',
         },
         signal: AbortSignal.timeout(8000),
       });
@@ -47,16 +48,15 @@ export class Hack2SkillProvider implements HackathonProvider {
   }
 
   async fetchHackathons(): Promise<NormalizedHackathon[]> {
-    const feedUrl = process.env.HACK2SKILL_FEED_URL;
+    const feedUrl = process.env.HACK2SKILL_FEED_URL || `${HACK2SKILL_PUBLIC_API}?records=30&page=1`;
 
-    // If an authorized API/feed is configured in environment, ingest from it
-    if (feedUrl) {
+    try {
       const res = await fetch(feedUrl, {
         headers: {
           'User-Agent': 'HackMate/1.0',
           Accept: 'application/json',
         },
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(12000),
       });
 
       if (!res.ok) {
@@ -64,53 +64,69 @@ export class Hack2SkillProvider implements HackathonProvider {
       }
 
       const json = await res.json();
-      const items: Array<Record<string, unknown>> = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
-      return items.map((item) => {
-        const sourceId = String(item.id || item.slug || '').trim();
-        const title = String(item.title || item.name || 'Hack2Skill Hackathon').trim();
-        const registrationUrl = String(item.registrationUrl || item.url || `${HACK2SKILL_BASE_URL}/hackathons/${sourceId}`);
+      const items: Array<Record<string, unknown>> = Array.isArray(json?.data)
+        ? json.data
+        : Array.isArray(json)
+        ? json
+        : [];
 
-        return {
+      const results: NormalizedHackathon[] = [];
+
+      for (const item of items) {
+        const sourceId = String(item._id || item.id || item.eventUrl || item.slug || '').trim();
+        if (!sourceId) continue;
+
+        const title = String(item.title || item.name || 'Hack2Skill Hackathon').trim();
+        const slug = String(item.eventUrl || item.slug || '').trim();
+        const registrationUrl = slug
+          ? `${HACK2SKILL_BASE_URL}/event/${slug.replace(/^\/+/, '')}`
+          : typeof item.registrationUrl === 'string' && item.registrationUrl
+          ? item.registrationUrl
+          : `${HACK2SKILL_BASE_URL}/hackathons/${sourceId}`;
+
+        const modeRaw = String(item.mode || 'ONLINE').toUpperCase();
+        const mode = modeRaw.includes('PERSON') || modeRaw.includes('OFFLINE')
+          ? 'offline'
+          : modeRaw.includes('HYBRID')
+          ? 'hybrid'
+          : 'online';
+
+        const startAt = item.submissionStart || item.registrationStart || item.startAt || null;
+        const endAt = item.submissionEnd || item.registrationEnd || item.endAt || null;
+        const deadline = item.registrationEnd || item.registrationDeadlineAt || endAt || null;
+
+        results.push({
           source: 'hack2skill',
           sourceId,
           title,
-          description: typeof item.description === 'string' ? item.description : null,
-          organizer: typeof item.organizer === 'string' ? item.organizer : 'Hack2Skill',
-          startAt: item.startAt ? new Date(String(item.startAt)).toISOString() : null,
-          endAt: item.endAt ? new Date(String(item.endAt)).toISOString() : null,
-          registrationDeadlineAt: item.registrationDeadlineAt ? new Date(String(item.registrationDeadlineAt)).toISOString() : null,
+          description: typeof item.description === 'string'
+            ? item.description
+            : `Hack2Skill hackathon: ${title}. Mode: ${mode}.`,
+          organizer: typeof item.organizer === 'string'
+            ? item.organizer
+            : typeof item.flag === 'string' && item.flag
+            ? `Hack2Skill ${item.flag}`
+            : 'Hack2Skill Community',
+          startAt: startAt ? new Date(String(startAt)).toISOString() : null,
+          endAt: endAt ? new Date(String(endAt)).toISOString() : null,
+          registrationDeadlineAt: deadline ? new Date(String(deadline)).toISOString() : null,
           timezone: 'Asia/Kolkata',
-          mode: String(item.mode || 'online'),
+          mode,
           location: typeof item.location === 'string' ? item.location : null,
           teamSizeMin: typeof item.teamSizeMin === 'number' ? item.teamSizeMin : 1,
           teamSizeMax: typeof item.teamSizeMax === 'number' ? item.teamSizeMax : 4,
           prizeAmount: typeof item.prizeAmount === 'number' ? item.prizeAmount : null,
           prizeCurrency: 'INR',
           prizeDisplay: item.prizeDisplay ? String(item.prizeDisplay) : null,
-          themes: Array.isArray(item.themes) ? item.themes.map(String) : [],
+          themes: Array.isArray(item.themes) ? item.themes.map(String) : ['Hackathon'],
           techStack: Array.isArray(item.techStack) ? item.techStack.map(String) : [],
           registrationUrl,
           sourceUrl: registrationUrl,
           rawPayload: item,
-        };
-      });
-    }
-
-    // Default: Check Hack2Skill accessibility
-    // Without a configured API feed key, per PRD Section 27, we attempt to verify connection
-    // and provide safe fallback without breaking the multi-provider pipeline.
-    try {
-      const ping = await fetch(`${HACK2SKILL_BASE_URL}/hackathons`, {
-        headers: { 'User-Agent': 'HackMate/1.0' },
-        signal: AbortSignal.timeout(5000),
-      });
-
-      if (!ping.ok) {
-        throw new Error(`Hack2Skill returned status ${ping.status}`);
+        });
       }
 
-      // Empty listing until authorized feed or partner integration is plugged in
-      return [];
+      return results;
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Hack2Skill connection failed';
       throw new Error(`UPSTREAM_TIMEOUT: ${errorMsg}`);

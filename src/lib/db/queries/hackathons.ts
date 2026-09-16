@@ -157,8 +157,18 @@ export async function markExpiredHackathons() {
 
 export async function getHackathonById(id: string) {
   const db = getCoreDb();
-  const rows = await db.select().from(hackathons).where(eq(hackathons.id, id)).limit(1);
-  return rows[0] ?? null;
+  const [hackathonRows, sources] = await Promise.all([
+    db.select().from(hackathons).where(eq(hackathons.id, id)).limit(1),
+    db.select().from(hackathonSources).where(eq(hackathonSources.hackathonId, id)),
+  ]);
+  const hackathon = hackathonRows[0];
+  if (!hackathon) return null;
+  const primarySource = sources[0]?.source || 'unstop';
+  return {
+    ...hackathon,
+    source: primarySource,
+    sources,
+  };
 }
 
 export async function listHackathons(filters: {
@@ -180,10 +190,28 @@ export async function listHackathons(filters: {
 
   const where = conditions.length ? and(...conditions) : undefined;
   const offset = (filters.page - 1) * filters.pageSize;
-  const [rows, totalRows] = await Promise.all([
-    db.select().from(hackathons).where(where).orderBy(asc(hackathons.registrationDeadlineAt), desc(hackathons.createdAt)).limit(filters.pageSize).offset(offset),
+  const sourceSelect = filters.source
+    ? sql<string | null>`coalesce((select hs.source from ${hackathonSources} hs where hs.hackathon_id = ${hackathons.id} and hs.source = ${filters.source} limit 1), (select hs.source from ${hackathonSources} hs where hs.hackathon_id = ${hackathons.id} limit 1))`
+    : sql<string | null>`(select hs.source from ${hackathonSources} hs where hs.hackathon_id = ${hackathons.id} limit 1)`;
+
+  const [rawRows, totalRows] = await Promise.all([
+    db
+      .select({
+        hackathon: hackathons,
+        source: sourceSelect,
+      })
+      .from(hackathons)
+      .where(where)
+      .orderBy(asc(hackathons.registrationDeadlineAt), desc(hackathons.createdAt))
+      .limit(filters.pageSize)
+      .offset(offset),
     db.select({ total: count() }).from(hackathons).where(where),
   ]);
+
+  const rows = rawRows.map((r) => ({
+    ...r.hackathon,
+    source: r.source || filters.source || 'unstop',
+  }));
 
   return {
     rows,

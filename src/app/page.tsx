@@ -747,7 +747,7 @@ function Discovery({ hackathons, loading }: { hackathons: ApiHackathon[]; loadin
                               rel="noopener noreferrer"
                               onClick={(e) => e.stopPropagation()}
                               className="flex h-7 w-7 items-center justify-center border border-accent/40 bg-accent/10 text-accent transition-all hover:bg-accent hover:text-accent-ink hover:scale-105"
-                              title="Register on Unstop"
+                              title={`Register on ${h.source === 'devfolio' ? 'Devfolio' : h.source === 'hack2skill' ? 'Hack2Skill' : h.source === 'unstop' ? 'Unstop' : 'Platform'}`}
                             >
                               <ExternalLink size={11} />
                             </a>

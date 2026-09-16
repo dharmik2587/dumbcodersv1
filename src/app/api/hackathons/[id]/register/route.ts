@@ -15,9 +15,11 @@ export async function GET(
   try {
     const hackathon = await getHackathonById(id);
     if (!hackathon) return failure('NOT_FOUND', 'Hackathon not found.', 404);
-    if (!hackathon.registrationUrl) return failure('NOT_FOUND', 'No registration URL available for this hackathon.', 404);
 
-    return NextResponse.redirect(hackathon.registrationUrl, 302);
+    const targetUrl = hackathon.registrationUrl || hackathon.sourceUrl;
+    if (!targetUrl) return failure('NOT_FOUND', 'No registration URL available for this hackathon.', 404);
+
+    return NextResponse.redirect(targetUrl, 302);
   } catch (error) {
     console.error('GET /api/hackathons/[id]/register failed', error);
     return failure('SERVER_ERROR', 'Could not process registration redirect.', 500);

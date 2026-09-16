@@ -88,6 +88,8 @@ export type Hackathon = {
   maxTeamSize: number;
   minTeamSize: number;
   registrationUrl?: string;
+  sourceUrl?: string;
+  source?: "unstop" | "devfolio" | "hack2skill" | string;
   demand: "low" | "medium" | "high";
   trackDemands: Partial<Record<RoleKey, number>>;
   description: string;

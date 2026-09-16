@@ -185,12 +185,21 @@ export function InteractiveHackathonList({ initialHackathons }: InteractiveHacka
 
                   <div className="flex items-center gap-2">
                     <a
-                      href={hackathon.registrationUrl || hackathon.sourceUrl || 'https://unstop.com/hackathons'}
+                      href={`/api/hackathons/${hackathon.id}/register`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-accent py-2 text-xs font-semibold text-black transition-all hover:opacity-90 active:scale-95"
                     >
-                      <span>View Hackathon</span>
+                      <span>
+                        Register on{' '}
+                        {(hackathon as { source?: string }).source === 'devfolio'
+                          ? 'Devfolio'
+                          : (hackathon as { source?: string }).source === 'hack2skill'
+                          ? 'Hack2Skill'
+                          : (hackathon as { source?: string }).source === 'unstop'
+                          ? 'Unstop'
+                          : 'Platform'}
+                      </span>
                       <ExternalLink className="h-3.5 w-3.5" />
                     </a>
 

@@ -18,7 +18,28 @@ function normalizeHackathon(raw: Record<string, unknown>, index: number = 0): Ha
   }
 
   const title = (raw.title || raw.name || 'Hackathon') as string;
-  const organizer = (raw.organizer || raw.host || 'Unstop') as string;
+
+  const rawSource = typeof raw.source === 'string'
+    ? raw.source
+    : Array.isArray(raw.sources) && (raw.sources[0] as { source?: string })?.source
+    ? (raw.sources[0] as { source: string }).source
+    : String(raw.registrationUrl || raw.sourceUrl || '').toLowerCase().includes('devfolio')
+    ? 'devfolio'
+    : String(raw.registrationUrl || raw.sourceUrl || '').toLowerCase().includes('hack2skill')
+    ? 'hack2skill'
+    : String(raw.organizer || raw.host || '').toLowerCase().includes('devfolio')
+    ? 'devfolio'
+    : String(raw.organizer || raw.host || '').toLowerCase().includes('hack2skill')
+    ? 'hack2skill'
+    : 'unstop';
+
+  const defaultOrganizer = rawSource === 'devfolio'
+    ? 'Devfolio Community'
+    : rawSource === 'hack2skill'
+    ? 'Hack2Skill'
+    : 'Unstop';
+
+  const organizer = (raw.organizer || raw.host || defaultOrganizer) as string;
   const location = (raw.location || raw.city || 'Online') as string;
   const themes = Array.isArray(raw.themes) && raw.themes.length > 0 ? (raw.themes as string[]) : ['AI / ML', 'Web'];
   const primaryTrack = themes[0] || 'Open';
@@ -42,6 +63,7 @@ function normalizeHackathon(raw: Record<string, unknown>, index: number = 0): Ha
   const rawKey = typeof raw.canonicalKey === 'string' ? raw.canonicalKey : `HK-${rawId.slice(0, 6).toUpperCase()}`;
   const descriptionStr = typeof raw.description === 'string' ? raw.description : `${primaryTrack} Hackathon organized by ${organizer}. Showcase your skills, build prototypes, and compete for prizes.`;
   const regUrl = typeof raw.registrationUrl === 'string' ? raw.registrationUrl : typeof raw.registration_url === 'string' ? raw.registration_url : undefined;
+  const srcUrl = typeof raw.sourceUrl === 'string' ? raw.sourceUrl : typeof raw.source_url === 'string' ? raw.source_url : undefined;
 
   return {
     id: rawId,
@@ -64,6 +86,8 @@ function normalizeHackathon(raw: Record<string, unknown>, index: number = 0): Ha
     description: descriptionStr,
     status,
     registrationUrl: regUrl,
+    sourceUrl: srcUrl,
+    source: rawSource,
   };
 }
 
