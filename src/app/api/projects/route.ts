@@ -25,9 +25,10 @@ export async function POST(req: NextRequest) {
     return success(project);
   } catch (error: any) {
     if (error.message?.includes('Unauthorized')) {
-      return failure('FORBIDDEN', error.message, 403);
+      return failure('FORBIDDEN', 'You do not have permission to perform this action.', 403);
     }
-    return failure('INTERNAL_ERROR', error.message || 'Failed to create project', 500);
+    console.error('POST /api/projects failed:', error);
+    return failure('INTERNAL_ERROR', 'Failed to create project. Please try again.', 500);
   }
 }
 
@@ -45,8 +46,9 @@ export async function GET(req: NextRequest) {
     return success(projects);
   } catch (error: any) {
     if (error.message?.includes('Unauthorized')) {
-      return failure('FORBIDDEN', error.message, 403);
+      return failure('FORBIDDEN', 'You do not have permission to view these projects.', 403);
     }
-    return failure('INTERNAL_ERROR', error.message || 'Failed to list projects', 500);
+    console.error('GET /api/projects failed:', error);
+    return failure('INTERNAL_ERROR', 'Failed to list projects. Please try again.', 500);
   }
 }

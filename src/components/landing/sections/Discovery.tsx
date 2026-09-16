@@ -94,7 +94,7 @@ export function Discovery() {
               </div>
               <div className="mt-6">
                 <Link
-                  href="/hackathons"
+                  href="/discover"
                   className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-beam hover:underline"
                 >
                   Open full hackathon directory →

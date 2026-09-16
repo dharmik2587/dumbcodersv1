@@ -6,9 +6,13 @@ import type { SQL } from 'drizzle-orm';
  * Never exposed to the browser.
  */
 export function getMessageEncryptionKey(): string {
-  const key = process.env.MESSAGE_ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const key = process.env.MESSAGE_ENCRYPTION_KEY;
   if (!key) {
-    throw new Error('Missing MESSAGE_ENCRYPTION_KEY or SUPABASE_SERVICE_ROLE_KEY in environment');
+    throw new Error(
+      '[crypto] MESSAGE_ENCRYPTION_KEY is required but not set. ' +
+      'Add it to your .env file. Do NOT reuse SUPABASE_SERVICE_ROLE_KEY — ' +
+      'rotate that key immediately if it was previously used here.'
+    );
   }
   return key;
 }

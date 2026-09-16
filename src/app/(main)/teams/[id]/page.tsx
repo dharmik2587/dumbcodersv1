@@ -517,9 +517,13 @@ function TeamWorkspace() {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <CoverageHead coverage={cov} />
-          {project && (
+          {project ? (
             <Link href={`/projects/${project.id}`}>
               <Button variant="outline" size="sm">Open project</Button>
+            </Link>
+          ) : (
+            <Link href={`/projects?teamId=${team.id}`}>
+              <Button variant="outline" size="sm">Start a project</Button>
             </Link>
           )}
           <Link href={`/match?hackathon=${team.hackathonId}`}>

@@ -1,6 +1,8 @@
 import OpenAI from 'openai';
 import { v4 as uuidv4 } from 'uuid';
 
+import { z } from 'zod';
+
 export type RoadmapStep = {
   id: string;
   label: string;
@@ -19,10 +21,16 @@ const DEFAULT_STEPS: RoadmapStep[] = [
   { id: uuidv4(), label: 'Prepare pitch deck and demo video', done: false, order: 8 },
 ];
 
+const StepSchema = z.object({
+  label: z.string().min(1),
+  order: z.number().int().positive(),
+});
+
 export async function generateRoadmap(
   projectName: string,
   description: string,
-  roles: string[]
+  roles: string[],
+  existingSteps?: Array<{ label: string; done: boolean; order: number }>
 ): Promise<RoadmapStep[]> {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -32,8 +40,8 @@ export async function generateRoadmap(
   }
 
   const openai = new OpenAI({ apiKey });
-
-  const prompt = `
+  
+  let prompt = `
 You are an expert technical product manager for hackathons.
 I need a 5 to 10 step checklist/roadmap for a hackathon project.
 Project Name: ${projectName}
@@ -44,6 +52,14 @@ Provide the response purely as a JSON array of objects. Each object must have ex
 Do not include markdown blocks, just raw JSON.
 `;
 
+  if (existingSteps && existingSteps.length > 0) {
+    prompt += `\n\nThe following steps are already marked done and MUST be preserved exactly as they are in your output:\n`;
+    existingSteps.forEach((s) => {
+      prompt += `- ${s.label} (order: ${s.order})\n`;
+    });
+    prompt += `Only regenerate the incomplete steps. Combine them with the done steps to form the final complete list.`;
+  }
+
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -53,21 +69,24 @@ Do not include markdown blocks, just raw JSON.
     });
 
     const text = response.choices[0]?.message?.content?.trim() || '[]';
-    // Strip markdown formatting if any
     const jsonStr = text.replace(/^```json\n?/, '').replace(/\n?```$/, '');
     
-    const parsed = JSON.parse(jsonStr) as { label: string; order: number }[];
-    
+    // Zod validation
+    const parsed = z.array(StepSchema).parse(JSON.parse(jsonStr));
+
     if (!Array.isArray(parsed) || parsed.length === 0) {
       throw new Error('Invalid JSON format from AI');
     }
 
-    return parsed.map((p) => ({
-      id: uuidv4(),
-      label: p.label,
-      done: false,
-      order: p.order,
-    }));
+    return parsed.map((p) => {
+      const isDone = existingSteps?.some((s) => s.label === p.label && s.done) ?? false;
+      return {
+        id: uuidv4(),
+        label: p.label,
+        done: isDone,
+        order: p.order,
+      };
+    });
   } catch (err) {
     console.error('AI roadmap generation failed:', err);
     return DEFAULT_STEPS;

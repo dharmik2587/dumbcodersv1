@@ -11,7 +11,11 @@ export async function GET() {
   try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
 
-  const db = getCoreDb();
-  const rows = await db.select({ hackathon: hackathons, bookmarkedAt: hackathonBookmarks.createdAt }).from(hackathonBookmarks).innerJoin(hackathons, eq(hackathonBookmarks.hackathonId, hackathons.id)).where(eq(hackathonBookmarks.userId, userId)).orderBy(desc(hackathonBookmarks.createdAt));
-  return success(rows);
+  try {
+    const db = getCoreDb();
+    const rows = await db.select({ hackathon: hackathons, bookmarkedAt: hackathonBookmarks.createdAt }).from(hackathonBookmarks).innerJoin(hackathons, eq(hackathonBookmarks.hackathonId, hackathons.id)).where(eq(hackathonBookmarks.userId, userId)).orderBy(desc(hackathonBookmarks.createdAt));
+    return success(rows);
+  } catch {
+    return failure('INTERNAL_ERROR', 'Failed to load bookmarks.', 500);
+  }
 }

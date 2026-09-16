@@ -167,15 +167,15 @@ export function Footer() {
               t: "Platform",
               items: [
                 { name: "Matching", href: "#matching" },
-                { name: "Hackathons", href: "/hackathons" },
-                { name: "Teams", href: "/teams/my" },
-                { name: "Projects", href: "#builder" },
+                { name: "Hackathons", href: "/discover" },
+                { name: "Teams", href: "/teams" },
+                { name: "Projects", href: "/projects" },
               ],
             },
             {
               t: "Builders",
               items: [
-                { name: "Profiles", href: "/find-partners" },
+                { name: "Profiles", href: "/discover" },
                 { name: "Skill graph", href: "#matching" },
                 { name: "Availability", href: "#composition" },
                 { name: "Requests", href: "/requests" },
@@ -184,9 +184,9 @@ export function Footer() {
             {
               t: "Company",
               items: [
-                { name: "Campus reps", href: "#cta" },
-                { name: "Changelog", href: "#cta" },
-                { name: "Privacy", href: "#top" },
+                { name: "About", href: "/about" },
+                { name: "Privacy", href: "/privacy" },
+                { name: "Terms", href: "/terms" },
                 { name: "Contact", href: "#cta" },
               ],
             },

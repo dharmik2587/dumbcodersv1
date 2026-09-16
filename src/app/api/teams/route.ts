@@ -15,7 +15,11 @@ export async function GET() {
   let userId: string;
   try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
-  return success(await listMyTeams(userId));
+  try {
+    return success(await listMyTeams(userId));
+  } catch {
+    return failure('INTERNAL_ERROR', 'Failed to list teams', 500);
+  }
 }
 
 export async function POST(request: NextRequest) {

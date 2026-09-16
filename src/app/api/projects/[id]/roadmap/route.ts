@@ -35,8 +35,11 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
     const roles = members.map(m => m.role).filter(Boolean) as string[];
 
+    // Extract previously completed steps to preserve them
+    const doneSteps = data.roadmap?.steps?.filter(s => s.done) ?? [];
+
     // Generate AI roadmap
-    const steps = await generateRoadmap(data.project.name, data.project.description || '', roles);
+    const steps = await generateRoadmap(data.project.name, data.project.description || '', roles, doneSteps);
 
     // Save to DB
     const roadmap = await upsertRoadmap(id, steps, 'gpt-4o-mini');
@@ -44,9 +47,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return success(roadmap);
   } catch (error: any) {
     if (error.message?.includes('Unauthorized')) {
-      return failure('FORBIDDEN', error.message, 403);
+      return failure('FORBIDDEN', 'You do not have permission to generate this roadmap.', 403);
     }
-    return failure('INTERNAL_ERROR', error.message || 'Failed to generate roadmap', 500);
+    console.error('POST /api/projects/[id]/roadmap failed:', error);
+    return failure('INTERNAL_ERROR', 'Failed to generate roadmap. Please try again.', 500);
   }
 }
 
@@ -69,6 +73,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const updated = await updateRoadmapStep(id, stepId, done);
     return success(updated);
   } catch (error: any) {
-    return failure('INTERNAL_ERROR', error.message || 'Failed to update step', 500);
+    console.error('PATCH /api/projects/[id]/roadmap failed:', error);
+    return failure('INTERNAL_ERROR', 'Failed to update step. Please try again.', 500);
   }
 }

@@ -190,6 +190,12 @@ function SignUpContent() {
                 {loading ? <Loader2 size={16} className="animate-spin" /> : 'Create Account'}
                 {!loading && <ArrowRight size={15} />}
               </Button>
+              <p className="text-center font-mono text-[10px] text-fg3 leading-relaxed pt-1">
+                By signing up you agree to our{' '}
+                <Link href="/terms" className="text-fg2 hover:text-fg underline underline-offset-2 transition-colors">Terms</Link>
+                {' '}and{' '}
+                <Link href="/privacy" className="text-fg2 hover:text-fg underline underline-offset-2 transition-colors">Privacy Policy</Link>
+              </p>
             </form>
           </div>
           

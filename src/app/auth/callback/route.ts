@@ -12,8 +12,9 @@ export async function GET(request: Request) {
   const type = searchParams.get('type') as EmailOtpType | null;
   const error = searchParams.get('error');
   const errorDescription = searchParams.get('error_description');
-  // if "next" is in param, use it as the redirect URL
-  let next = searchParams.get('next') ?? '/discover';
+  // Validate `next` is a same-origin relative path (no protocol, no double-slash, no absolute URL)
+  const rawNext = searchParams.get('next') ?? '';
+  let next = /^\/[^/\\]/.test(rawNext) ? rawNext : '/discover';
 
   // If this was a password recovery email, route to reset-password
   if (type === 'recovery') {

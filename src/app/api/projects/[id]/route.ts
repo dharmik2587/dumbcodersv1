@@ -21,9 +21,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return success(data);
   } catch (error: any) {
     if (error.message?.includes('Unauthorized')) {
-      return failure('FORBIDDEN', error.message, 403);
+      return failure('FORBIDDEN', 'You do not have permission to view this project.', 403);
     }
-    return failure('INTERNAL_ERROR', error.message || 'Failed to get project', 500);
+    console.error('GET /api/projects/[id] failed:', error);
+    return failure('INTERNAL_ERROR', 'Failed to get project. Please try again.', 500);
   }
 }
 
@@ -55,7 +56,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     return success(updated);
   } catch (error: any) {
-    return failure('INTERNAL_ERROR', error.message || 'Failed to update project', 500);
+    console.error('PATCH /api/projects/[id] failed:', error);
+    return failure('INTERNAL_ERROR', 'Failed to update project. Please try again.', 500);
   }
 }
 
@@ -77,6 +79,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     await db.delete(projects).where(eq(projects.id, id));
     return success({ deleted: true });
   } catch (error: any) {
-    return failure('INTERNAL_ERROR', error.message || 'Failed to delete project', 500);
+    console.error('DELETE /api/projects/[id] failed:', error);
+    return failure('INTERNAL_ERROR', 'Failed to delete project. Please try again.', 500);
   }
 }

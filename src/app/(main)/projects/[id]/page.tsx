@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 
 import { motion } from "framer-motion";
-import { GripVertical, Plus } from "lucide-react";
+import { ArrowLeft, GripVertical, Plus } from "lucide-react";
 import { useStore } from "@/client/store/useStore";
 import { useApiStore, byIdMap } from "@/client/store/apiStore";
 import { Avatar, relTime } from "@/components/shared";
@@ -23,6 +23,14 @@ import {
 import { ThemedLine, useChartTokens } from "@/components/charts";
 import { cn } from "@/client/utils/cn";
 import type { Task } from "@/client/types";
+
+type RealProject = {
+  id: string;
+  name: string;
+  description: string | null;
+  teamId: string;
+  createdAt: string;
+};
 
 const COLUMNS = [
   { id: "todo", label: "Todo", tone: "text-fg3" },
@@ -46,30 +54,65 @@ export default function ProjectWorkspace() {
   const byId = useMemo(() => byIdMap(builders), [builders]);
   const t = useChartTokens();
 
+  // Dual-path: try real API first, fall back to mock store
+  const [realProject, setRealProject] = useState<RealProject | null>(null);
+  const [fetchingReal, setFetchingReal] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    setFetchingReal(true);
+    fetch(`/api/projects/${id}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.data?.project) setRealProject(data.data.project);
+      })
+      .catch(() => {})
+      .finally(() => setFetchingReal(false));
+  }, [id]);
+
   const [draft, setDraft] = useState<Record<Col, string>>({ todo: "", doing: "", done: "" });
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<Col | null>(null);
 
   const project = projects.find((p) => p.id === id);
-  if (!project)
+  const hasRealData = Boolean(realProject);
+
+  // Show not-found only if: no real project AND not still loading AND not in mock store
+  if (!fetchingReal && !realProject && !project)
     return (
       <EmptyState
         title="Project not found"
-        body="Open a team workspace to reach its project."
-        action={<Link href="/teams"><Button variant="outline">Teams</Button></Link>}
+        body="This project doesn't exist or you don't have access."
+        action={<Link href="/projects"><Button variant="outline"><ArrowLeft size={13} /> Back to projects</Button></Link>}
       />
     );
 
-  const team = teams.find((x) => x.id === project.teamId);
-  const hack = hackathons.find((h) => h.id === project.hackathonId);
-  const doneCount = project.checklist.filter((c) => c.done).length;
-  const ms = new Date(project.submissionAt).getTime() - Date.now();
+  // If still loading and not in mock store, show skeleton
+  if (fetchingReal && !project)
+    return (
+      <div className="mx-auto max-w-[1400px] space-y-4 animate-pulse">
+        <div className="h-6 w-48 rounded bg-line" />
+        <div className="h-10 w-96 rounded bg-line" />
+        <div className="h-4 w-64 rounded bg-line" />
+      </div>
+    );
+
+  // Prefer real data for display; fall back to mock
+  const displayName = realProject?.name ?? project?.name ?? "Project";
+  const displayDesc = realProject?.description ?? project?.notes ?? "";
+  const teamId = realProject?.teamId ?? project?.teamId ?? "";
+
+  const team = teams.find((x) => x.id === teamId);
+  const hack = project ? hackathons.find((h) => h.id === project.hackathonId) : null;
+  const doneCount = project?.checklist.filter((c) => c.done).length ?? 0;
+  const totalChecklist = project?.checklist.length ?? 0;
+  const ms = project ? new Date(project.submissionAt).getTime() - Date.now() : 0;
   const hours = Math.max(0, Math.floor(ms / 3_600_000));
-  const openTasks = project.tasks.filter((x) => x.column !== "done").length;
-  const ownerGaps = project.tasks.filter((x) => !x.ownerId && x.column !== "done").length;
+  const openTasks = project?.tasks.filter((x) => x.column !== "done").length ?? 0;
+  const ownerGaps = project?.tasks.filter((x) => !x.ownerId && x.column !== "done").length ?? 0;
 
   const drop = (col: Col) => {
-    if (!dragging) return;
+    if (!dragging || !project) return;
     moveTask(project.id, dragging, col);
     setDragging(null);
     setOver(null);
@@ -80,18 +123,25 @@ export default function ProjectWorkspace() {
       <Reveal>
         <div className="flex flex-wrap items-end justify-between gap-5 border-b border-line pb-6">
           <div>
+            {/* Breadcrumb */}
+            <Link
+              href="/projects"
+              className="mb-3 inline-flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-fg3 transition-colors hover:text-fg"
+            >
+              <ArrowLeft size={11} />
+              Projects
+            </Link>
             <Label tone="accent">
-              <span className="text-fg3">project</span> / {project.name}
+              <span className="text-fg3">project</span> / {displayName}
             </Label>
             <h1 className="display mt-3 text-[clamp(1.8rem,3.8vw,2.9rem)] font-medium leading-tight text-fg">
-              {project.name}
+              {displayName}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[11px] text-fg3">
-              <span>{team?.name}</span>
-              <span>·</span>
-              <span>{hack?.name}</span>
-              <span>·</span>
-              <span>submission T-{hours}h</span>
+              {team && <span>{team.name}</span>}
+              {hack && <><span>·</span><span>{hack.name}</span></>}
+              {displayDesc && <><span>·</span><span className="max-w-xs truncate">{displayDesc}</span></>}
+              {project && <><span>·</span><span>T-{hours}h</span></>}
             </div>
           </div>
           {team && (
@@ -105,7 +155,8 @@ export default function ProjectWorkspace() {
         </div>
       </Reveal>
 
-      {/* stat strip */}
+      {/* stat strip — only shown when mock project data is available */}
+      {project && (
       <Reveal delay={60}>
         <div className="mt-6 grid grid-cols-2 gap-px border border-line bg-line md:grid-cols-4">
           {[
@@ -133,6 +184,7 @@ export default function ProjectWorkspace() {
           ))}
         </div>
       </Reveal>
+      )}
 
       <div className="grid gap-6 py-8 lg:grid-cols-12">
         {/* board */}
@@ -146,7 +198,7 @@ export default function ProjectWorkspace() {
             </div>
           </Reveal>
           <div className="grid gap-3 md:grid-cols-3">
-            {COLUMNS.map((col) => {
+            {project ? COLUMNS.map((col) => {
               const items = project.tasks.filter((x) => x.column === col.id);
               return (
                 <div
@@ -223,7 +275,7 @@ export default function ProjectWorkspace() {
                   </form>
                 </div>
               );
-            })}
+            }) : <p className="col-span-3 py-10 text-center font-mono text-[11px] text-fg3">Task board requires seed data</p>}
           </div>
 
           <Reveal delay={80}>
@@ -231,7 +283,7 @@ export default function ProjectWorkspace() {
               <div className="flex items-center justify-between border-b border-line px-5 py-3">
                 <Label tone="accent">commit activity</Label>
                 <span className="font-mono text-[10px] tnum text-fg3">
-                  {project.commitCount} total
+                  {project?.commitCount ?? 0} total
                 </span>
               </div>
               <div className="px-4 py-4">
@@ -241,7 +293,7 @@ export default function ProjectWorkspace() {
                     labels: ["D-6", "D-5", "D-4", "D-3", "D-2", "D-1", "today"],
                     datasets: [
                       {
-                        data: project.commitsByDay,
+                      data: project?.commitsByDay ?? [0,0,0,0,0,0,0],
                         borderColor: t.accent,
                         backgroundColor: `${t.accent}22`,
                         fill: true,
@@ -268,7 +320,7 @@ export default function ProjectWorkspace() {
               </div>
               <div className="relative px-5 py-5">
                 <span className="absolute bottom-5 left-[25px] top-5 w-px bg-line" />
-                {project.log.map((l) => (
+                {(project?.log ?? []).map((l) => (
                   <div key={l.id} className="relative flex gap-4 pb-5 last:pb-0">
                     <span
                       className={cn(
@@ -309,14 +361,15 @@ export default function ProjectWorkspace() {
               <div className="flex items-center justify-between border-b border-line px-5 py-3">
                 <Label tone="accent">submission checklist</Label>
                 <span className="font-mono text-[10px] tnum text-fg3">
-                  {doneCount} of {project.checklist.length}
+                  {doneCount} of {project?.checklist.length ?? 0}
                 </span>
               </div>
               <div className="space-y-2.5 px-5 py-4">
-                {project.checklist.map((c) => (
+                {(project?.checklist ?? []).map((c) => (
                   <button
                     key={c.id}
                     onClick={() => {
+                      if (!project) return;
                       toggleChecklist(project.id, c.id);
                       pushToast({
                         label: c.done ? "Item reopened" : "Item cleared",
@@ -347,7 +400,13 @@ export default function ProjectWorkspace() {
           </Reveal>
 
           <Reveal delay={120}>
-            <AIRoadmapPanel teamId={project.teamId} projectName={project.name} description={project.notes} />
+            {/* AI Roadmap Panel — uses real project ID from API if available, falls back to mock project */}
+            <AIRoadmapPanel
+              teamId={teamId}
+              projectId={realProject?.id ?? project?.id}
+              projectName={displayName}
+              description={displayDesc}
+            />
           </Reveal>
 
           <Reveal delay={140}>
@@ -359,13 +418,13 @@ export default function ProjectWorkspace() {
               <div className="p-4">
                 <Textarea
                   rows={6}
-                  value={project.notes}
-                  onChange={(e) => setNotes(project.id, e.target.value)}
+                  value={project?.notes ?? ""}
+                  onChange={(e) => project && setNotes(project.id, e.target.value)}
                   placeholder="Scope decisions, cut features, judging angle…"
                   className="bg-raised text-[12.5px] leading-relaxed"
                 />
                 <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.14em] text-fg3">
-                  {project.notes.length} chars · edited {relTime(new Date().toISOString())}
+                  {(project?.notes ?? "").length} chars · edited {relTime(new Date().toISOString())}
                 </p>
               </div>
             </Panel>
@@ -445,7 +504,7 @@ function TaskCard({
   );
 }
 
-function AIRoadmapPanel({ teamId, projectName, description }: { teamId: string, projectName: string, description: string }) {
+function AIRoadmapPanel({ teamId, projectId, projectName, description }: { teamId: string, projectId?: string, projectName: string, description: string }) {
   const pushToast = useApiStore((s) => s.pushToast);
   const [dbProject, setDbProject] = useState<any>(null);
   const [roadmap, setRoadmap] = useState<any>(null);
@@ -456,30 +515,45 @@ function AIRoadmapPanel({ teamId, projectName, description }: { teamId: string, 
     async function load() {
       setLoading(true);
       try {
-        let res = await fetch(`/api/projects?teamId=${teamId}`);
-        if (!res.ok) throw new Error('Failed to fetch projects');
-        let data = await res.json();
-        let proj = data.data?.find((p: any) => p.name === projectName);
-        
-        if (!proj) {
-          const createRes = await fetch('/api/projects', {
-            method: 'POST',
-            body: JSON.stringify({ teamId, name: projectName, description })
-          });
-          if (createRes.ok) {
-            const createData = await createRes.json();
-            proj = createData.data;
-          }
-        }
-        
-        if (proj) {
-          setDbProject(proj);
-          const detailRes = await fetch(`/api/projects/${proj.id}`);
+        let proj: any = null;
+
+        // If we already have a real project ID, use it directly
+        if (projectId) {
+          const detailRes = await fetch(`/api/projects/${projectId}`);
           if (detailRes.ok) {
             const detailData = await detailRes.json();
-            setRoadmap(detailData.data?.roadmap);
+            proj = detailData.data?.project;
+            setRoadmap(detailData.data?.roadmap ?? null);
+          }
+        } else {
+          // Fall back to search-by-name for mock project compatibility
+          const res = await fetch(`/api/projects?teamId=${teamId}`);
+          if (!res.ok) throw new Error('Failed to fetch projects');
+          const data = await res.json();
+          proj = data.data?.find((p: any) => p.name === projectName);
+
+          if (!proj) {
+            const createRes = await fetch('/api/projects', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ teamId, name: projectName, description })
+            });
+            if (createRes.ok) {
+              const createData = await createRes.json();
+              proj = createData.data;
+            }
+          }
+
+          if (proj) {
+            const detailRes = await fetch(`/api/projects/${proj.id}`);
+            if (detailRes.ok) {
+              const detailData = await detailRes.json();
+              setRoadmap(detailData.data?.roadmap ?? null);
+            }
           }
         }
+
+        if (proj) setDbProject(proj);
       } catch (err) {
         console.error(err);
       } finally {
@@ -487,7 +561,8 @@ function AIRoadmapPanel({ teamId, projectName, description }: { teamId: string, 
       }
     }
     load();
-  }, [teamId, projectName, description]);
+  }, [teamId, projectId, projectName, description]);
+
 
   const regenerate = async () => {
     if (!dbProject) return;
