@@ -250,9 +250,40 @@ export async function listConversationMessages(
 export async function sendDirectMessage(
   conversationId: string,
   senderId: string,
-  content: string
+  content: string,
+  clientMessageId?: string
 ) {
   const db = getCoreDb();
+
+  if (clientMessageId) {
+    const [existing] = await db
+      .select({
+        id: directMessages.id,
+        conversationId: directMessages.conversationId,
+        senderId: directMessages.senderId,
+        content: sqlDecrypt(directMessages.content),
+        readAt: directMessages.readAt,
+        createdAt: directMessages.createdAt,
+      })
+      .from(directMessages)
+      .where(
+        and(
+          eq(directMessages.conversationId, conversationId),
+          eq(directMessages.clientMessageId, clientMessageId)
+        )
+      )
+      .limit(1);
+    
+    if (existing) {
+      const [convo] = await db
+        .select()
+        .from(conversations)
+        .where(eq(conversations.id, conversationId))
+        .limit(1);
+      const recipientId = convo.userAId === senderId ? convo.userBId : convo.userAId;
+      return { message: existing, recipientId };
+    }
+  }
 
   // Verify participant
   const [convo] = await db
@@ -273,6 +304,7 @@ export async function sendDirectMessage(
     .values({
       conversationId,
       senderId,
+      clientMessageId,
       content: sqlEncrypt(content) as unknown as string,
       createdAt: now,
     })

@@ -43,6 +43,13 @@
       "when": 1789554465812,
       "tag": "0005_blue_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789583682264,
+      "tag": "0006_parallel_richard_fisk",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import { triggerPusherEvent } from '@/lib/pusher';
 
 const sendMessageSchema = z.object({
   content: z.string().trim().min(1, 'Message cannot be empty').max(2000, 'Message cannot exceed 2000 characters'),
+  clientMessageId: z.string().uuid('Invalid client message ID').optional(),
 });
 
 export async function GET(
@@ -60,7 +61,8 @@ export async function POST(
     const { message, recipientId } = await sendDirectMessage(
       conversationId,
       userId,
-      parsed.data.content
+      parsed.data.content,
+      parsed.data.clientMessageId
     );
 
     // Notify recipient via Pusher on private authorized channel

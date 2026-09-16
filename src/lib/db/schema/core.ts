@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 export const colleges = pgTable(
   'colleges',
@@ -310,6 +311,7 @@ export const teamRequests = pgTable(
     fromUserIdx: index('team_requests_from_user_idx').on(table.fromUserId, table.status),
     toUserIdx: index('team_requests_to_user_idx').on(table.toUserId, table.status),
     teamIdx: index('team_requests_team_idx').on(table.teamId),
+    pendingUnique: uniqueIndex('team_requests_pending_unique_idx').on(table.fromUserId, table.toUserId).where(sql`status = 'pending'`),
   }),
 );
 
@@ -399,6 +401,7 @@ export const directMessages = pgTable(
   'direct_messages',
   {
     id: uuid('id').defaultRandom().primaryKey(),
+    clientMessageId: text('client_message_id'),
     conversationId: uuid('conversation_id')
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
@@ -415,6 +418,7 @@ export const directMessages = pgTable(
       table.createdAt,
     ),
     senderIdx: index('direct_messages_sender_idx').on(table.senderId),
+    clientMessageUnique: uniqueIndex('direct_messages_client_message_unique_idx').on(table.conversationId, table.clientMessageId),
   }),
 );
 
