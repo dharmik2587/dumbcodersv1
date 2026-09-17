@@ -1,5 +1,5 @@
 import { getProviders } from '../src/lib/hackathons/providers';
-import { upsertHackathonSource } from '../src/lib/db/queries/hackathons';
+import { markExpiredHackathons, upsertHackathonSource } from '../src/lib/db/queries/hackathons';
 import { getCoreDb } from '../src/lib/db/core';
 import { hackathonSources } from '../src/lib/db/schema/core';
 import { sql } from 'drizzle-orm';
@@ -55,6 +55,9 @@ async function syncAll() {
     }
     summary[provider.name] = stats;
   }
+
+  const expiredCount = await markExpiredHackathons();
+  console.log(`\nMarked ${expiredCount} past hackathons as expired.`);
 
   console.log('\n--- Sync Summary ---');
   console.table(summary);

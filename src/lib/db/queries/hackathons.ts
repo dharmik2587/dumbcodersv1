@@ -1,8 +1,25 @@
 import crypto from 'node:crypto';
 import { and, asc, count, desc, eq, ilike, sql } from 'drizzle-orm';
-import { getCoreDb } from '@/lib/db/core';
+import { getCoreDb, resetCoreDb } from '@/lib/db/core';
 import { hackathonBookmarks, hackathonInterests, hackathons, hackathonSources } from '@/lib/db/schema/core';
 import type { HackathonIngestItem } from '@/lib/validations/hackathon';
+
+export async function executeWithDbRetry<T>(operation: () => Promise<T>, maxRetries = 2): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await operation();
+    } catch (err) {
+      lastError = err;
+      if (attempt < maxRetries - 1) {
+        console.warn(`Database query failed on attempt ${attempt + 1}, resetting pool and retrying...`, (err as Error)?.message);
+        resetCoreDb();
+        await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
+      }
+    }
+  }
+  throw lastError;
+}
 
 export function computePayloadHash(payload: unknown): string {
   return crypto.createHash('sha256').update(JSON.stringify(payload ?? {})).digest('hex');
@@ -20,14 +37,23 @@ function dateOrNull(value: string | null | undefined) {
 }
 
 function hackathonValues(item: HackathonIngestItem, canonicalKey: string) {
+  const startAt = dateOrNull(item.startAt);
+  const endAt = dateOrNull(item.endAt);
+  const registrationDeadlineAt = dateOrNull(item.registrationDeadlineAt);
+  const now = new Date();
+  const isExpired = Boolean(
+    (registrationDeadlineAt && registrationDeadlineAt < now) ||
+    (!registrationDeadlineAt && endAt && endAt < now)
+  );
+
   return {
     canonicalKey,
     title: item.title,
     description: item.description ?? null,
     organizer: item.organizer ?? null,
-    startAt: dateOrNull(item.startAt),
-    endAt: dateOrNull(item.endAt),
-    registrationDeadlineAt: dateOrNull(item.registrationDeadlineAt),
+    startAt,
+    endAt,
+    registrationDeadlineAt,
     timezone: item.timezone || 'Asia/Kolkata',
     mode: item.mode ?? null,
     location: item.location ?? null,
@@ -40,7 +66,7 @@ function hackathonValues(item: HackathonIngestItem, canonicalKey: string) {
     techStack: item.techStack || [],
     registrationUrl: item.registrationUrl ?? null,
     sourceUrl: item.sourceUrl ?? null,
-    status: 'published',
+    status: isExpired ? 'expired' : 'published',
     updatedAt: new Date(),
     lastSeenAt: new Date(),
   };
@@ -147,7 +173,7 @@ export async function markExpiredHackathons() {
     .where(
       and(
         eq(hackathons.status, 'published'),
-        sql`${hackathons.registrationDeadlineAt} IS NOT NULL AND ${hackathons.registrationDeadlineAt} < ${now}`
+        sql`(${hackathons.registrationDeadlineAt} IS NOT NULL AND ${hackathons.registrationDeadlineAt} < ${now}) OR (${hackathons.registrationDeadlineAt} IS NULL AND ${hackathons.endAt} IS NOT NULL AND ${hackathons.endAt} < ${now})`
       )
     )
     .returning({ id: hackathons.id });
@@ -156,19 +182,21 @@ export async function markExpiredHackathons() {
 }
 
 export async function getHackathonById(id: string) {
-  const db = getCoreDb();
-  const [hackathonRows, sources] = await Promise.all([
-    db.select().from(hackathons).where(eq(hackathons.id, id)).limit(1),
-    db.select().from(hackathonSources).where(eq(hackathonSources.hackathonId, id)),
-  ]);
-  const hackathon = hackathonRows[0];
-  if (!hackathon) return null;
-  const primarySource = sources[0]?.source || 'unstop';
-  return {
-    ...hackathon,
-    source: primarySource,
-    sources,
-  };
+  return await executeWithDbRetry(async () => {
+    const db = getCoreDb();
+    const [hackathonRows, sources] = await Promise.all([
+      db.select().from(hackathons).where(eq(hackathons.id, id)).limit(1),
+      db.select().from(hackathonSources).where(eq(hackathonSources.hackathonId, id)),
+    ]);
+    const hackathon = hackathonRows[0];
+    if (!hackathon) return null;
+    const primarySource = sources[0]?.source || 'unstop';
+    return {
+      ...hackathon,
+      source: primarySource,
+      sources,
+    };
+  });
 }
 
 export async function listHackathons(filters: {
@@ -180,9 +208,26 @@ export async function listHackathons(filters: {
   page: number;
   pageSize: number;
 }) {
-  const db = getCoreDb();
   const conditions = [];
-  if (filters.status) conditions.push(eq(hackathons.status, filters.status));
+  const now = new Date();
+
+  if (filters.status === 'published' || !filters.status) {
+    conditions.push(eq(hackathons.status, 'published'));
+    // Ensure hackathons whose deadline has passed are NEVER shown in published/active list
+    conditions.push(
+      sql`(${hackathons.registrationDeadlineAt} IS NULL OR ${hackathons.registrationDeadlineAt} >= ${now})`
+    );
+    conditions.push(
+      sql`(${hackathons.endAt} IS NULL OR ${hackathons.endAt} >= ${now})`
+    );
+  } else if (filters.status === 'expired') {
+    conditions.push(
+      sql`(${hackathons.status} = 'expired' OR (${hackathons.registrationDeadlineAt} IS NOT NULL AND ${hackathons.registrationDeadlineAt} < ${now}) OR (${hackathons.endAt} IS NOT NULL AND ${hackathons.endAt} < ${now}))`
+    );
+  } else if (filters.status !== 'all') {
+    conditions.push(eq(hackathons.status, filters.status));
+  }
+
   if (filters.source) conditions.push(sql`exists (select 1 from ${hackathonSources} hs where hs.hackathon_id = ${hackathons.id} and hs.source = ${filters.source})`);
   if (filters.mode) conditions.push(eq(hackathons.mode, filters.mode));
   if (filters.theme) conditions.push(sql`${hackathons.themes} @> ARRAY[${filters.theme}]::text[]`);
@@ -194,31 +239,34 @@ export async function listHackathons(filters: {
     ? sql<string | null>`coalesce((select hs.source from ${hackathonSources} hs where hs.hackathon_id = ${hackathons.id} and hs.source = ${filters.source} limit 1), (select hs.source from ${hackathonSources} hs where hs.hackathon_id = ${hackathons.id} limit 1))`
     : sql<string | null>`(select hs.source from ${hackathonSources} hs where hs.hackathon_id = ${hackathons.id} limit 1)`;
 
-  const [rawRows, totalRows] = await Promise.all([
-    db
-      .select({
-        hackathon: hackathons,
-        source: sourceSelect,
-      })
-      .from(hackathons)
-      .where(where)
-      .orderBy(asc(hackathons.registrationDeadlineAt), desc(hackathons.createdAt))
-      .limit(filters.pageSize)
-      .offset(offset),
-    db.select({ total: count() }).from(hackathons).where(where),
-  ]);
+  return await executeWithDbRetry(async () => {
+    const db = getCoreDb();
+    const [rawRows, totalRows] = await Promise.all([
+      db
+        .select({
+          hackathon: hackathons,
+          source: sourceSelect,
+        })
+        .from(hackathons)
+        .where(where)
+        .orderBy(asc(hackathons.registrationDeadlineAt), desc(hackathons.createdAt))
+        .limit(filters.pageSize)
+        .offset(offset),
+      db.select({ total: count() }).from(hackathons).where(where),
+    ]);
 
-  const rows = rawRows.map((r) => ({
-    ...r.hackathon,
-    source: r.source || filters.source || 'unstop',
-  }));
+    const rows = rawRows.map((r) => ({
+      ...r.hackathon,
+      source: r.source || filters.source || 'unstop',
+    }));
 
-  return {
-    rows,
-    total: Number(totalRows[0]?.total ?? 0),
-    page: filters.page,
-    pageSize: filters.pageSize,
-  };
+    return {
+      rows,
+      total: Number(totalRows[0]?.total ?? 0),
+      page: filters.page,
+      pageSize: filters.pageSize,
+    };
+  });
 }
 
 export async function getUserHackathonFlags(userId: string, hackathonId: string) {
