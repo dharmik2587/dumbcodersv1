@@ -39,23 +39,20 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const publicPrefixes = [
-    '/',
-    '/sign-in',
-    '/sign-up',
-    '/auth/callback',
-    '/hackathons',
-    '/find-partners',
-    '/profile',
-    '/api',
+  // Protected routes that strictly require authentication
+  const protectedPrefixes = [
+    '/settings',
+    '/messages',
+    '/requests',
+    '/onboarding',
   ];
 
-  const isPublicRoute = publicPrefixes.some((prefix) => 
+  const isProtectedRoute = protectedPrefixes.some((prefix) =>
     request.nextUrl.pathname === prefix || request.nextUrl.pathname.startsWith(`${prefix}/`)
   );
 
-  // If no user and the route is not public, redirect to sign-in
-  if (!user && !isPublicRoute) {
+  // If no user and the route is protected, redirect to sign-in with context
+  if (!user && isProtectedRoute) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = '/sign-in';
     redirectUrl.searchParams.set('next', request.nextUrl.pathname);

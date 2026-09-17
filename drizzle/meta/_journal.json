@@ -50,6 +50,13 @@
       "when": 1789583682264,
       "tag": "0006_parallel_richard_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789674773672,
+      "tag": "0007_moaning_switch",
+      "breakpoints": true
     }
   ]
 }

@@ -57,6 +57,25 @@ export async function listProjectsForTeam(teamId: string, userId: string) {
   return db.select().from(projects).where(eq(projects.teamId, teamId)).orderBy(projects.createdAt);
 }
 
+export async function listPublicProjects(limit = 30) {
+  const db = getCoreDb();
+  const rows = await db
+    .select({
+      project: projects,
+      team: teams,
+    })
+    .from(projects)
+    .innerJoin(teams, eq(projects.teamId, teams.id))
+    .orderBy(desc(projects.createdAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    ...r.project,
+    teamName: r.team.name,
+    hackathonId: r.project.hackathonId || r.team.hackathonId,
+  }));
+}
+
 export async function upsertRoadmap(projectId: string, steps: Array<{ id: string; label: string; done: boolean; order: number }>, model: string) {
   const db = getCoreDb();
   

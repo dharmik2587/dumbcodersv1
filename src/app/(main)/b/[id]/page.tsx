@@ -41,6 +41,7 @@ import {
 } from "@/components/ui";
 import { ThemedRadar, useChartTokens } from "@/components/charts";
 import { cn } from "@/client/utils/cn";
+import { useGuestAuth } from "@/components/shared/GuestAuthModal";
 
 function Match() {
   const params = useSearchParams();
@@ -593,6 +594,7 @@ function RequestComposer({
 /* Public builder profile                                              */
 /* ------------------------------------------------------------------ */
 function BuilderProfile() {
+  const { requireAuth } = useGuestAuth();
   const { id } = useParams();
   const builders = useApiStore((s) => s.builders);
   const team = useActiveTeam();
@@ -686,7 +688,7 @@ function BuilderProfile() {
               No active team — complement score unavailable.
             </div>
           )}
-          <Button onClick={() => setComposing(true)}>
+          <Button onClick={() => requireAuth("send a collaboration request", () => setComposing(true))}>
             <UserPlus size={13} /> Send request
           </Button>
         </div>

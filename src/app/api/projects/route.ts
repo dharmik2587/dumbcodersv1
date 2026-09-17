@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { requireUserId } from '@/lib/auth/server';
-import { createProject, listProjectsForTeam } from '@/lib/db/queries/projects';
+import { createProject, listProjectsForTeam, listPublicProjects } from '@/lib/db/queries/projects';
 import { failure, success } from '@/lib/http';
 import { enforceRateLimit } from '@/lib/ratelimit';
 
@@ -35,21 +35,25 @@ export const POST = withApiHandler(
 );
 
 export const GET = withApiHandler(
-  { api: 'projects', requireAuth: true },
+  { api: 'projects', requireAuth: false },
   async ({ req, userId }) => {
     const url = new URL(req.url);
     const teamId = url.searchParams.get('teamId');
 
-    if (!teamId) return failure('BAD_REQUEST', 'Missing teamId', 400);
-
-    try {
-      const projects = await listProjectsForTeam(teamId, userId!);
-      return success(projects);
-    } catch (error: any) {
-      if (error.message?.includes('Unauthorized')) {
-        throw new AppError('You do not have permission to view these projects.', { code: 'FORBIDDEN', statusCode: 403 });
+    if (teamId && userId) {
+      try {
+        const projects = await listProjectsForTeam(teamId, userId);
+        return success(projects);
+      } catch (error: any) {
+        if (error.message?.includes('Unauthorized')) {
+          throw new AppError('You do not have permission to view these projects.', { code: 'FORBIDDEN', statusCode: 403 });
+        }
+        throw error;
       }
-      throw error;
     }
+
+    // Default to listing public projects
+    const projects = await listPublicProjects();
+    return success(projects);
   }
 );

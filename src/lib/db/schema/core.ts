@@ -529,6 +529,53 @@ export const projectRoadmaps = pgTable(
   }),
 );
 
+export const problemReports = pgTable(
+  'problem_reports',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: text('user_id').references(() => profiles.id, { onDelete: 'set null' }),
+    email: text('email'),
+    category: text('category').notNull(),
+    description: text('description').notNull(),
+    pageUrl: text('page_url'),
+    userAgent: text('user_agent'),
+    status: text('status').notNull().default('OPEN'),
+    priority: text('priority').notNull().default('MEDIUM'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  },
+  (table) => ({
+    statusIdx: index('problem_reports_status_idx').on(table.status),
+    userIdx: index('problem_reports_user_idx').on(table.userId),
+    createdAtIdx: index('problem_reports_created_at_idx').on(table.createdAt),
+  }),
+);
+
+export const careerApplications = pgTable(
+  'career_applications',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: text('user_id').references(() => profiles.id, { onDelete: 'set null' }),
+    name: text('name').notNull(),
+    email: text('email').notNull(),
+    role: text('role').notNull(),
+    portfolioUrl: text('portfolio_url'),
+    githubUrl: text('github_url'),
+    linkedinUrl: text('linkedin_url'),
+    resumeUrl: text('resume_url'),
+    message: text('message').notNull(),
+    status: text('status').notNull().default('NEW'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    statusIdx: index('career_applications_status_idx').on(table.status),
+    roleIdx: index('career_applications_role_idx').on(table.role),
+    createdAtIdx: index('career_applications_created_at_idx').on(table.createdAt),
+  }),
+);
+
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
 export type College = typeof colleges.$inferSelect;
@@ -549,4 +596,9 @@ export type Conversation = typeof conversations.$inferSelect;
 export type DirectMessage = typeof directMessages.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type ProjectRoadmap = typeof projectRoadmaps.$inferSelect;
+export type ProblemReport = typeof problemReports.$inferSelect;
+export type NewProblemReport = typeof problemReports.$inferInsert;
+export type CareerApplication = typeof careerApplications.$inferSelect;
+export type NewCareerApplication = typeof careerApplications.$inferInsert;
+
 

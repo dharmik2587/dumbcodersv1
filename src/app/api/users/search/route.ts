@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { requireUserId } from '@/lib/auth/server';
+import { getOptionalUserId } from '@/lib/auth/server';
 import { hasCoreDatabase } from '@/lib/db/core';
 import { searchPartners } from '@/lib/db/queries/partners';
 import { failure, success } from '@/lib/http';
@@ -7,8 +7,7 @@ import { failure, success } from '@/lib/http';
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
-  let currentUserId: string;
-  try { currentUserId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
+  const currentUserId = await getOptionalUserId();
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
 
   const params = request.nextUrl.searchParams;

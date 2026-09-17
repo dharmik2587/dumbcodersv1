@@ -16,6 +16,7 @@ import {
   Panel,
   Reveal,
 } from "@/components/ui";
+import { useGuestAuth } from "@/components/shared/GuestAuthModal";
 
 type Project = {
   id: string;
@@ -179,6 +180,7 @@ function CreateProjectModal({ teamId, onClose, onCreated }: { teamId: string; on
 }
 
 function ProjectsContent() {
+  const { requireAuth } = useGuestAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const teams = useApiStore((s) => s.teams);
@@ -218,58 +220,64 @@ function ProjectsContent() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { if (selectedTeamId) loadProjects(selectedTeamId); }, [selectedTeamId, loadProjects]);
-
-  const handleTeamSwitch = (teamId: string) => {
-    setSelectedTeamId(teamId);
-    setActiveTeam(teamId);
-    setTeamDropdown(false);
-    router.replace(`/projects?teamId=${teamId}`);
-  };
+  useEffect(() => {
+    if (selectedTeamId) {
+      loadProjects(selectedTeamId);
+    } else {
+      // Load public projects if no team is selected
+      fetch('/api/projects')
+        .then((r) => r.json())
+        .then((d) => {
+          if (Array.isArray(d.data)) {
+            setProjects(d.data as ProjectWithRoadmap[]);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [selectedTeamId, loadProjects]);
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto max-w-[1400px] px-5 py-8 md:px-10">
       <Reveal>
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Label tone="accent"><span className="text-fg3">workspace</span> / projects</Label>
-            <h1 className="display mt-3 text-[clamp(1.6rem,3vw,2.4rem)] font-medium leading-tight text-fg">Projects</h1>
-            <p className="mt-1.5 text-[13px] text-fg3">AI-generated roadmaps for your team's hackathon builds.</p>
+            <Label tone="accent">Projects</Label>
+            <h1 className="display mt-1 text-[28px] text-fg">Build in public.</h1>
+            <p className="mt-1 text-[13px] text-fg3">
+              Generate AI roadmaps for your hackathon builds and track shipping milestones.
+            </p>
           </div>
+
           <div className="flex items-center gap-3">
             {teams.length > 1 && (
               <div className="relative">
                 <button
-                  onClick={() => setTeamDropdown((v) => !v)}
-                  className="flex items-center gap-2 border border-line bg-raised px-3 py-2 text-[12px] text-fg transition-colors hover:border-line-strong"
+                  onClick={() => setTeamDropdown(!teamDropdown)}
+                  className="flex items-center gap-2 border border-line bg-surface px-3 py-1.5 font-mono text-[12px] text-fg"
                 >
-                  <span className="flex h-5 w-5 items-center justify-center border border-accent-line bg-accent-soft font-mono text-[9px] text-accent">
-                    {selectedTeam?.name.slice(0, 2).toUpperCase() ?? "—"}
-                  </span>
-                  <span className="max-w-[120px] truncate">{selectedTeam?.name ?? "Select team"}</span>
-                  <ChevronDown size={12} className="text-fg3" />
+                  <span>{selectedTeam?.name ?? "Select team"}</span>
+                  <ChevronDown size={13} />
                 </button>
-                <AnimatePresence>
-                  {teamDropdown && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -2 }}
-                      className="absolute right-0 top-full z-20 mt-1 w-48 border border-line-strong bg-surface"
-                      style={{ boxShadow: "var(--shadow-float)" }}
-                    >
-                      {teams.map((t) => (
-                        <button key={t.id} onClick={() => handleTeamSwitch(t.id)}
-                          className={cn("flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[12px] transition-colors hover:bg-hover", t.id === selectedTeamId && "bg-accent-soft text-accent")}
-                        >
-                          <span className="flex h-5 w-5 shrink-0 items-center justify-center border border-accent-line bg-accent-soft font-mono text-[9px] text-accent">{t.name.slice(0, 2).toUpperCase()}</span>
-                          <span className="truncate">{t.name}</span>
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {teamDropdown && (
+                  <div className="absolute right-0 top-full z-20 mt-1 w-48 border border-line bg-surface py-1 shadow-lg">
+                    {teams.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => {
+                          setSelectedTeamId(t.id);
+                          setActiveTeam(t.id);
+                          setTeamDropdown(false);
+                        }}
+                        className="w-full px-3 py-1.5 text-left font-mono text-[12px] text-fg hover:bg-raised"
+                      >
+                        {t.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
-            <Button onClick={() => setShowCreate(true)} disabled={!selectedTeamId}>
+            <Button onClick={() => requireAuth("create a project roadmap", () => setShowCreate(true))}>
               <Plus size={13} /> New project
             </Button>
           </div>
@@ -298,7 +306,7 @@ function ProjectsContent() {
           <EmptyState
             title="No projects yet"
             body="Create a project to generate an AI roadmap for your hackathon build."
-            action={<Button onClick={() => setShowCreate(true)}><Plus size={13} /> Create first project</Button>}
+            action={<Button onClick={() => requireAuth("create a project roadmap", () => setShowCreate(true))}><Plus size={13} /> Create first project</Button>}
           />
         )}
         {!loading && !error && !selectedTeamId && teams.length === 0 && (

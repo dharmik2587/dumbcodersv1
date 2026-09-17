@@ -77,6 +77,60 @@ export async function listMyTeams(userId: string) {
   }));
 }
 
+export async function listOpenTeams(limit = 30) {
+  const db = getCoreDb();
+  const openTeams = await db
+    .select()
+    .from(teams)
+    .where(eq(teams.isOpen, true))
+    .orderBy(teams.updatedAt)
+    .limit(limit);
+
+  if (!openTeams.length) return [];
+
+  const teamIds = openTeams.map((t) => t.id);
+  const allMembers = await db
+    .select({
+      teamId: teamMembers.teamId,
+      userId: teamMembers.userId,
+      role: teamMembers.role,
+      joinedAt: teamMembers.joinedAt,
+      profile: {
+        id: profiles.id,
+        fullName: profiles.fullName,
+        username: profiles.username,
+        avatarUrl: profiles.avatarUrl,
+        studentCode: profiles.studentCode,
+        rolePreference: profiles.rolePreference,
+      },
+    })
+    .from(teamMembers)
+    .innerJoin(profiles, eq(teamMembers.userId, profiles.id));
+
+  const membersByTeam = new Map<string, any[]>();
+  allMembers.forEach((m) => {
+    const list = membersByTeam.get(m.teamId) || [];
+    list.push({
+      builderId: m.userId,
+      role: m.role || 'member',
+      joinedAt: m.joinedAt?.toISOString?.() || '',
+      name: m.profile?.fullName || m.profile?.username || 'Builder',
+      avatarUrl: m.profile?.avatarUrl,
+      studentCode: m.profile?.studentCode,
+    });
+    membersByTeam.set(m.teamId, list);
+  });
+
+  return openTeams.map((team) => ({
+    team: {
+      ...team,
+      members: membersByTeam.get(team.id) || [],
+    },
+    membership: null,
+  }));
+}
+
+
 export async function createTeamMessage(teamId: string, userId: string, content: string) {
   const db = getCoreDb();
   const [msg] = await db

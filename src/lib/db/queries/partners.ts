@@ -22,7 +22,7 @@ export async function getTeamMissingRoles(teamId: string): Promise<string[]> {
 }
 
 export async function searchPartners(input: {
-  currentUserId: string;
+  currentUserId?: string | null;
   q?: string;
   skill?: string;
   collegeId?: string;
@@ -32,7 +32,10 @@ export async function searchPartners(input: {
   pageSize: number;
 }) {
   const db = getCoreDb();
-  const conditions = [eq(profiles.isOpenToTeam, true), not(eq(profiles.id, input.currentUserId))];
+  const conditions = [eq(profiles.isOpenToTeam, true)];
+  if (input.currentUserId) {
+    conditions.push(not(eq(profiles.id, input.currentUserId)));
+  }
   if (input.q) {
     conditions.push(
       or(
@@ -51,8 +54,12 @@ export async function searchPartners(input: {
 
   // Resolve matching context in parallel with the search.
   const [currentProfile, currentGithub, teamContext] = await Promise.all([
-    db.select().from(profiles).where(eq(profiles.id, input.currentUserId)).limit(1),
-    db.select().from(githubData).where(eq(githubData.userId, input.currentUserId)).limit(1),
+    input.currentUserId
+      ? db.select().from(profiles).where(eq(profiles.id, input.currentUserId)).limit(1)
+      : Promise.resolve([]),
+    input.currentUserId
+      ? db.select().from(githubData).where(eq(githubData.userId, input.currentUserId)).limit(1)
+      : Promise.resolve([]),
     input.teamId
       ? getTeamMissingRoles(input.teamId).then((missingRoles): TeamContext => ({ missingRoles }))
       : Promise.resolve<TeamContext | null>(null),

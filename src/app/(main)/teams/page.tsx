@@ -21,6 +21,7 @@ import {
 } from "@/components/ui";
 import { cn } from "@/client/utils/cn";
 import { removeTeamMember } from "@/client/lib/api";
+import { useGuestAuth } from "@/components/shared/GuestAuthModal";
 
 
 /* ------------------------------------------------------------------ */
@@ -28,6 +29,7 @@ import { removeTeamMember } from "@/client/lib/api";
 /* ------------------------------------------------------------------ */
 function TeamsIndex() {
   const router = useRouter();
+  const { requireAuth } = useGuestAuth();
   const teams = useApiStore((s) => s.teams);
   const hackathons = useApiStore((s) => s.hackathons);
   const builders = useApiStore((s) => s.builders);
@@ -85,17 +87,19 @@ function TeamsIndex() {
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!joinCode.trim()) return;
-              setJoining(true);
-              try {
-                const { applyToTeam } = await import("@/client/lib/api/teams");
-                await applyToTeam(joinCode.trim(), "Joining via team code");
-                pushToast({ label: "Success", body: "Request sent to join team.", tone: "good" });
-                setJoinCode("");
-              } catch (e) {
-                pushToast({ label: "Error", body: "Could not join. Check the code.", tone: "bad" });
-              } finally {
-                setJoining(false);
-              }
+              requireAuth("join this squad", async () => {
+                setJoining(true);
+                try {
+                  const { applyToTeam } = await import("@/client/lib/api/teams");
+                  await applyToTeam(joinCode.trim(), "Joining via team code");
+                  pushToast({ label: "Success", body: "Request sent to join team.", tone: "good" });
+                  setJoinCode("");
+                } catch (e) {
+                  pushToast({ label: "Error", body: "Could not join. Check the code.", tone: "bad" });
+                } finally {
+                  setJoining(false);
+                }
+              });
             }} className="flex">
               <input
                 value={joinCode}
@@ -107,7 +111,7 @@ function TeamsIndex() {
                 Join
               </Button>
             </form>
-            <Button onClick={() => setCreating(true)}>
+            <Button onClick={() => requireAuth("create a new hackathon squad", () => setCreating(true))}>
               <Send size={13} /> Create team
             </Button>
           </div>

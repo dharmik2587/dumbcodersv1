@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { requireUserId } from '@/lib/auth/server';
 import { getCoreDb, hasCoreDatabase } from '@/lib/db/core';
 import { createOutboxEvent } from '@/lib/db/queries/notifications';
-import { listMyTeams } from '@/lib/db/queries/teams';
+import { listMyTeams, listOpenTeams } from '@/lib/db/queries/teams';
 import { teamMembers, teams } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
 import { createTeamSchema } from '@/lib/validations/team';
@@ -14,10 +14,16 @@ export const runtime = 'nodejs';
 import { withApiHandler } from '@/lib/api/with-api-handler';
 
 export const GET = withApiHandler(
-  { api: 'teams', requireAuth: true },
-  async ({ userId }) => {
+  { api: 'teams', requireAuth: false },
+  async ({ req, userId }) => {
     if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
-    return success(await listMyTeams(userId!));
+    const url = new URL(req.url);
+    const wantPublic = url.searchParams.get('public') === 'true';
+
+    if (userId && !wantPublic) {
+      return success(await listMyTeams(userId));
+    }
+    return success(await listOpenTeams());
   }
 );
 

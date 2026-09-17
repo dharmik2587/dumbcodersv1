@@ -34,6 +34,7 @@ import { daysLeft } from "@/client/data/seed";
 import { ROLE_LABEL, RoleKey } from "@/client/types";
 import { useTheme } from "@/client/lib/theme";
 import { getPusherClient } from "@/client/lib/pusher-client";
+import { BetaBadge } from "@/components/shared/BetaBadge";
 
 const NAV = [
   { to: "/discover", label: "Discover", icon: Compass, key: "g d" },
@@ -512,11 +513,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className="flex h-14 items-center justify-between border-b border-line px-4">
-          <Link href="/" className="flex min-w-0 items-center gap-2.5">
+          <Link href="/" className="flex min-w-0 items-center gap-2">
             <Wordmark />
             {!collapsed && (
               <span className="display truncate text-[15px] font-semibold text-fg">HackMate</span>
             )}
+            {!collapsed && <BetaBadge />}
           </Link>
           <button
             onClick={() => setCollapsed((v) => !v)}
@@ -629,10 +631,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         <div className="border-t border-line p-3">
           {!collapsed && (
-            <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 px-2.5 font-mono text-[10px] text-fg3 uppercase tracking-wider">
+            <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1.5 px-2.5 font-mono text-[10px] text-fg3 uppercase tracking-wider">
               <Link href="/about" className="hover:text-fg">About</Link>
-              <Link href="/privacy" className="hover:text-fg">Privacy</Link>
-              <Link href="/terms" className="hover:text-fg">Terms</Link>
+              <Link href="/careers" className="hover:text-fg">Careers</Link>
+              <Link href="/changelog" className="hover:text-fg">Changelog</Link>
+              <Link href="/report-problem" className="text-amber hover:underline">Report bug</Link>
             </div>
           )}
           <Link

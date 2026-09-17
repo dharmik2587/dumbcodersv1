@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowRight, Bookmark, Check, ExternalLink, Sparkles, Users } from "lucide-react";
+import { ArrowRight, Bookmark, Bug, Check, ExternalLink, Sparkles, Users } from "lucide-react";
 import { BUILDERS, CLUSTER_NAME, CLUSTER_ORDER, HACKATHONS, daysLeft } from "@/client/data/seed";
 import { byIdMap } from "@/client/store/useStore";
 import { teamCoverage } from "@/client/lib/matching";
+import { BetaBadge } from "@/components/shared/BetaBadge";
 import {
   Button,
   Chip,
@@ -77,16 +78,9 @@ import { useRouter } from "next/navigation";
 
 export default function Landing() {
   const { user } = useAuth();
-  const router = useRouter();
   const hackathons = useApiStore((s) => s.hackathons);
   const loadHackathons = useApiStore((s) => s.loadHackathons);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (user) {
-      router.replace('/discover');
-    }
-  }, [user, router]);
 
   useEffect(() => {
     if (hackathons.length === 0) {
@@ -107,6 +101,8 @@ export default function Landing() {
       <Compatibility />
       <Composition />
       <Builder />
+      <BuildingHackMateSection />
+      <HelpUsBuildSection />
       <FinalCTA />
       <LandingFooter />
     </div>
@@ -120,39 +116,52 @@ function scrollToId(id: string) {
 
 function LandingNav({ user }: { user: import('@supabase/supabase-js').User | null }) {
   const links = [
-    ["Matching", "#matching"],
-    ["Hackathons", "#discovery"],
-    ["Compatibility", "#compatibility"],
-    ["Teams", "#composition"],
-    ["Projects", "#builder"],
+    { label: "Hackathons", href: "/hackathons" },
+    { label: "Builders", href: "/builders" },
+    { label: "Matching", href: "/match" },
+    { label: "Teams", href: "/teams" },
+    { label: "Projects", href: "/projects" },
+    { label: "Skills", href: "/skills" },
+    { label: "Changelog", href: "/changelog" },
   ];
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-canvas/85 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-5 md:px-10">
-        <button onClick={() => scrollToId("top")} className="flex items-center gap-2.5" aria-label="Back to top">
-          <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden>
-            <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" stroke="var(--fg)" strokeWidth="1.4" opacity="0.32" />
-            <path d="M14 14h6v6h-6z" fill="var(--accent)" />
-            <path d="M10 7h4M7 10v4M17 10v4M10 17h4" stroke="var(--mint)" strokeWidth="1.1" opacity="0.75" />
-          </svg>
-          <span className="text-[15px] font-semibold tracking-[-0.02em] text-fg">HackMate</span>
-        </button>
-        <nav className="hidden items-center gap-7 lg:flex">
-          {links.map(([l, h]) => (
-            <button
-              key={h}
-              onClick={() => scrollToId(h.slice(1))}
+        <div className="flex items-center gap-3">
+          <Link href="/" className="flex items-center gap-2.5" aria-label="HackMate Home">
+            <svg viewBox="0 0 24 24" className="h-6 w-6" fill="none" aria-hidden>
+              <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" stroke="var(--fg)" strokeWidth="1.4" opacity="0.32" />
+              <path d="M14 14h6v6h-6z" fill="var(--accent)" />
+              <path d="M10 7h4M7 10v4M17 10v4M10 17h4" stroke="var(--mint)" strokeWidth="1.1" opacity="0.75" />
+            </svg>
+            <span className="text-[15px] font-semibold tracking-[-0.02em] text-fg">HackMate</span>
+          </Link>
+          <BetaBadge />
+        </div>
+        <nav className="hidden items-center gap-6 lg:flex">
+          {links.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
               className="group relative font-mono text-[10px] uppercase tracking-[0.16em] text-fg3 transition-colors hover:text-fg"
             >
-              {l}
+              {item.label}
               <span className="absolute -bottom-1.5 left-0 h-px w-0 bg-accent transition-all duration-300 group-hover:w-full" />
-            </button>
+            </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/report-problem"
+            className="hidden items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-fg3 transition-colors hover:text-amber sm:flex"
+            title="Report a problem directly to student maintainers"
+          >
+            <Bug size={12} className="text-amber" />
+            Report bug
+          </Link>
           {user ? (
             <Link href="/discover">
-              <Button size="sm">Go to Discover</Button>
+              <Button size="sm">Dashboard →</Button>
             </Link>
           ) : (
             <>
@@ -1189,45 +1198,239 @@ function FinalCTA() {
 }
 
 /* ------------------------------------------------------------------ */
+function BuildingHackMateSection() {
+  return (
+    <section id="building" className="relative border-t border-line bg-surface/40 py-20 md:py-28">
+      <div className="relative mx-auto max-w-[1400px] px-5 md:px-10">
+        <div className="grid gap-10 lg:grid-cols-12 lg:items-center">
+          <div className="lg:col-span-7">
+            <Reveal>
+              <div className="flex items-center gap-2.5">
+                <Label tone="accent">07 / building hackmate</Label>
+                <BetaBadge />
+              </div>
+              <h2 className="display mt-6 text-[clamp(2.1rem,4.5vw,3.6rem)] font-medium leading-[1.02] text-fg">
+                Built by students. <span className="text-fg2">Still being built.</span>
+              </h2>
+              <p className="mt-6 max-w-xl text-[16px] leading-[1.7] text-fg2">
+                Built between classes, hackathons, and too many late nights. HackMate is an independent, student-built platform designed to make finding the right teammates for hackathons less painful.
+              </p>
+              <p className="mt-3 max-w-xl text-[14px] leading-[1.7] text-fg3">
+                HackMate is currently in active beta. Some features, integrations, and external source crawlers may be incomplete or behave unexpectedly while we&apos;re expanding the system. Instead of pretending everything is polished corporate software, we build openly with student contributors.
+              </p>
+
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Link href="/changelog">
+                  <Button variant="outline" className="gap-2">
+                    <Sparkles size={14} className="text-mint" />
+                    View Beta Changelog
+                  </Button>
+                </Link>
+                <Link href="/report-problem">
+                  <Button variant="outline" className="gap-2">
+                    <Bug size={14} className="text-amber" />
+                    Report a Problem
+                  </Button>
+                </Link>
+              </div>
+            </Reveal>
+          </div>
+
+          <div className="lg:col-span-5">
+            <Reveal delay={120}>
+              <Panel className="p-6 md:p-8 space-y-5 border-accent/20 bg-accent/5">
+                <div className="flex items-center justify-between border-b border-line pb-4">
+                  <span className="font-mono text-xs font-semibold uppercase tracking-wider text-fg">
+                    Beta Transparency Matrix
+                  </span>
+                  <span className="font-mono text-[10px] text-mint">● LIVE STAGING</span>
+                </div>
+
+                <div className="space-y-3 font-mono text-[12px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-fg2">Hackathon Aggregation</span>
+                    <span className="text-mint">LIVE · Neon DB</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-fg2">Public Builder Profiles</span>
+                    <span className="text-mint">LIVE · Open Access</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-fg2">Team Matching Heuristic</span>
+                    <span className="text-amber">BETA · Active Testing</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-fg2">Direct Problem Reporting</span>
+                    <span className="text-mint">LIVE · Open Pipeline</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-fg2">Realtime Encrypted Chat</span>
+                    <span className="text-fg3">UNDER DEVELOPMENT</span>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-line text-[12px] text-fg3">
+                  Found something unexpected?{' '}
+                  <Link href="/report-problem" className="text-accent underline">
+                    Tell us what went wrong →
+                  </Link>
+                </div>
+              </Panel>
+            </Reveal>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+function HelpUsBuildSection() {
+  return (
+    <section id="help-us-build" className="relative border-t border-line bg-canvas py-20 md:py-28">
+      <div className="relative mx-auto max-w-[1400px] px-5 md:px-10">
+        <div className="mx-auto max-w-3xl text-center">
+          <Reveal>
+            <Label tone="muted">08 / community & contributors</Label>
+            <h2 className="display mt-6 text-[clamp(2rem,4.2vw,3.2rem)] font-medium leading-[1.05] text-fg">
+              Want to help us build HackMate?
+            </h2>
+            <p className="mx-auto mt-6 max-w-lg text-[15px] leading-[1.7] text-fg2">
+              Found a bug? Have an idea? Want to ship backend endpoints or design the interface?
+              HackMate is open for student contributors across frontend, backend, ML, scraping, and campus advocacy.
+            </p>
+
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Link href="/careers">
+                <Button size="lg" className="gap-2">
+                  <Sparkles size={15} />
+                  Join the Team · Open Roles
+                </Button>
+              </Link>
+              <Link href="/report-problem">
+                <Button size="lg" variant="outline" className="gap-2">
+                  <Bug size={14} className="text-amber" />
+                  Report a Problem
+                </Button>
+              </Link>
+              <a
+                href="https://github.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-line bg-surface px-4 py-2.5 text-[13px] font-medium text-fg transition-colors hover:border-fg3 hover:bg-surface-2"
+              >
+                <svg className="h-4 w-4 fill-current" viewBox="0 0 24 24">
+                  <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                </svg>
+                View on GitHub
+              </a>
+            </div>
+          </Reveal>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+const footerNavigation = {
+  platform: [
+    { label: "Hackathons", href: "/hackathons" },
+    { label: "Builders", href: "/builders" },
+    { label: "Matching", href: "/match" },
+    { label: "Teams", href: "/teams" },
+    { label: "Projects", href: "/projects" },
+    { label: "Skill Graph", href: "/skills" },
+    { label: "Availability", href: "/availability" },
+  ],
+  company: [
+    { label: "About", href: "/about" },
+    { label: "Campus Reps", href: "/campus-reps" },
+    { label: "Changelog", href: "/changelog" },
+    { label: "Careers / Contribute", href: "/careers" },
+    { label: "Contact", href: "/contact" },
+    { label: "Report a Problem", href: "/report-problem" },
+  ],
+  legal: [
+    { label: "Privacy Policy", href: "/privacy" },
+    { label: "Terms of Service", href: "/terms" },
+  ],
+};
+
 function LandingFooter() {
   return (
     <footer className="border-t border-line bg-surface">
       <div className="mx-auto max-w-[1400px] px-5 md:px-10">
         <div className="grid grid-cols-2 gap-y-10 border-b border-line py-14 md:grid-cols-12">
-          <div className="col-span-2 md:col-span-5">
-            <span className="text-[15px] font-semibold tracking-[-0.02em] text-fg">HackMate</span>
-            <p className="mt-4 max-w-xs text-[13px] leading-relaxed text-fg2">
-              A teammate layer for college hackathons. Built by people who spent too many nights
-              scrolling group chats.
+          <div className="col-span-2 md:col-span-5 pr-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[16px] font-semibold tracking-[-0.02em] text-fg">HackMate</span>
+              <BetaBadge />
+            </div>
+            <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-fg2">
+              Built by students, for students building things. HackMate is currently in active beta. Some features, integrations, and data may be incomplete or behave unexpectedly.
             </p>
-            <div className="mt-6">
-              
+            <div className="mt-5 flex flex-col gap-2 font-mono text-[11px]">
+              <Link href="/report-problem" className="text-amber hover:underline">
+                Found something broken? Report a problem →
+              </Link>
+              <Link href="/careers" className="text-accent hover:underline">
+                Want to help us build it? Join the team →
+              </Link>
             </div>
           </div>
-          {[
-            ["Platform", ["Matching", "Hackathons", "Teams", "Projects"]],
-            ["Builders", ["Profiles", "Skill graph", "Availability", "Requests"]],
-            ["Company", ["Campus reps", "Changelog", "Privacy", "Contact"]],
-          ].map(([t, items]) => (
-            <div key={t as string} className="md:col-span-2">
-              <Label tone="muted">{t as string}</Label>
-              <ul className="mt-4 space-y-2.5">
-                {(items as string[]).map((i) => (
-                  <li key={i}>
-                    <button
-                      onClick={() => scrollToId("top")}
-                      className="text-[13px] text-fg3 transition-colors hover:text-fg"
-                    >
-                      {i}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+
+          <div className="md:col-span-3">
+            <Label tone="muted">Platform</Label>
+            <ul className="mt-4 space-y-2.5">
+              {footerNavigation.platform.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="text-[13px] text-fg3 transition-colors hover:text-fg"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="md:col-span-2">
+            <Label tone="muted">Company</Label>
+            <ul className="mt-4 space-y-2.5">
+              {footerNavigation.company.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="text-[13px] text-fg3 transition-colors hover:text-fg"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div className="md:col-span-2">
+            <Label tone="muted">Legal</Label>
+            <ul className="mt-4 space-y-2.5">
+              {footerNavigation.legal.map((item) => (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    className="text-[13px] text-fg3 transition-colors hover:text-fg"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
+
         <div className="flex flex-col gap-3 py-6 font-mono text-[10px] uppercase tracking-[0.16em] text-fg3 md:flex-row md:items-center md:justify-between">
-          <span>© 2026 Hackmate Labs — made on campus</span>
+          <span>v0.9 · Beta · Built by students on campus</span>
           <span className="flex items-center gap-4">
             <span className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 animate-pulse-dot rounded-full bg-mint" />
@@ -1240,3 +1443,4 @@ function LandingFooter() {
     </footer>
   );
 }
+
