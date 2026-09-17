@@ -5,6 +5,7 @@ import { failure, success } from '@/lib/http';
 import { hackathonListQuerySchema } from '@/lib/validations/hackathon';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
