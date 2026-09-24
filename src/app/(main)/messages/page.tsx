@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Send, MessageSquare, Search, User, ArrowLeft, ShieldCheck, CheckCheck } from 'lucide-react';
+import { Send, MessageSquare, Search, User, ArrowLeft, ShieldCheck, CheckCheck, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { useMe } from '@/client/store/apiStore';
 import { subscribeChannel } from '@/client/lib/pusher-client';
 
@@ -22,6 +22,7 @@ interface ConversationItem {
 
 interface MessageItem {
   id: string;
+  clientMessageId?: string;
   conversationId: string;
   senderId: string;
   content: string;
@@ -30,6 +31,8 @@ interface MessageItem {
   senderName: string | null;
   senderUsername: string;
   senderAvatar: string | null;
+  status?: 'sending' | 'sent' | 'failed';
+  error?: string;
 }
 
 function MessagesContent() {
@@ -46,7 +49,7 @@ function MessagesContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const composerInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Fetch user conversations
+  // 1. Fetch user conversations (event-accelerated, fallback on window focus)
   const { data: conversations, isLoading: loadingConversations } = useQuery<ConversationItem[]>({
     queryKey: ['conversations'],
     queryFn: async () => {
@@ -55,7 +58,7 @@ function MessagesContent() {
       if (!res.ok) throw new Error(body?.error?.message ?? 'Failed to load conversations');
       return body.data;
     },
-    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
   });
 
   // Sync conversationId from query param
@@ -80,7 +83,7 @@ function MessagesContent() {
       return body.data as { id: string };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setActiveConversationId(data.id);
       router.replace('/messages');
       setTimeout(() => composerInputRef.current?.focus(), 100);
@@ -104,7 +107,7 @@ function MessagesContent() {
 
   const activeConvo = conversations?.find((c) => c.id === activeConversationId);
 
-  // 3. Fetch active conversation messages
+  // 3. Fetch active conversation messages (event-accelerated, fallback on window focus)
   const { data: messages, isLoading: loadingMessages } = useQuery<MessageItem[]>({
     queryKey: ['messages', activeConversationId],
     queryFn: async () => {
@@ -112,41 +115,160 @@ function MessagesContent() {
       const res = await fetch(`/api/messages/${activeConversationId}`, { credentials: 'include' });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error?.message ?? 'Failed to load messages');
-      return body.data;
+      return (body.data as MessageItem[]).map((m) => ({ ...m, status: 'sent' }));
     },
     enabled: Boolean(activeConversationId),
-    refetchInterval: 3000,
+    refetchOnWindowFocus: true,
   });
 
-  // 4. Send message mutation
+  // 4. Send message mutation with Optimistic UI and Retry capabilities
   const sendMutation = useMutation({
-    mutationFn: async ({ convoId, text }: { convoId: string; text: string }) => {
+    mutationFn: async ({
+      convoId,
+      text,
+      clientMessageId,
+    }: {
+      convoId: string;
+      text: string;
+      clientMessageId: string;
+    }) => {
       const res = await fetch(`/api/messages/${convoId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ content: text }),
+        body: JSON.stringify({ content: text, clientMessageId }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error?.message ?? 'Failed to send message');
-      return body.data;
+      return body.data as MessageItem;
     },
-    onSuccess: () => {
-      setMessageText('');
-      queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    onMutate: async ({ convoId, text, clientMessageId }) => {
+      // Cancel outgoing fetches to avoid overwriting optimistic message
+      await queryClient.cancelQueries({ queryKey: ['messages', convoId] });
+
+      const previousMessages = queryClient.getQueryData<MessageItem[]>(['messages', convoId]) || [];
+
+      const optimisticMsg: MessageItem = {
+        id: clientMessageId,
+        clientMessageId,
+        conversationId: convoId,
+        senderId: me?.id || '',
+        content: text,
+        readAt: null,
+        createdAt: new Date().toISOString(),
+        senderName: me?.name || null,
+        senderUsername: me?.handle || '',
+        senderAvatar: me?.avatarUrl || null,
+        status: 'sending',
+      };
+
+      // Optimistically append to thread
+      queryClient.setQueryData<MessageItem[]>(['messages', convoId], [...previousMessages, optimisticMsg]);
+
+      // Optimistically update conversations list
+      queryClient.setQueryData<ConversationItem[]>(['conversations'], (old = []) => {
+        return old.map((c) =>
+          c.id === convoId
+            ? { ...c, lastMessage: text, lastMessageAt: new Date().toISOString() }
+            : c
+        );
+      });
+
+      return { previousMessages, clientMessageId };
+    },
+    onSuccess: (savedMessage, { convoId, clientMessageId }) => {
+      // Reconcile optimistic message with canonical message from server
+      queryClient.setQueryData<MessageItem[]>(['messages', convoId], (old = []) => {
+        return old.map((m) =>
+          m.id === clientMessageId || m.clientMessageId === clientMessageId
+            ? { ...savedMessage, status: 'sent' }
+            : m
+        );
+      });
+    },
+    onError: (err, { convoId, clientMessageId }) => {
+      // Mark optimistic message as failed with error details for retry
+      queryClient.setQueryData<MessageItem[]>(['messages', convoId], (old = []) => {
+        return old.map((m) =>
+          m.id === clientMessageId || m.clientMessageId === clientMessageId
+            ? { ...m, status: 'failed', error: err instanceof Error ? err.message : 'Failed to deliver' }
+            : m
+        );
+      });
     },
   });
 
-  // Pusher subscription for live incoming messages on private authenticated channel
+  // 5. Pusher subscription for real-time incoming messages on private channel
   useEffect(() => {
     if (!me?.id) return;
-    const unsubscribe = subscribeChannel(`private-user-${me.id}`, 'direct-message', () => {
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      if (activeConversationId) {
-        queryClient.invalidateQueries({ queryKey: ['messages', activeConversationId] });
+    const unsubscribe = subscribeChannel<{
+      messageId: string;
+      conversationId: string;
+      senderId: string;
+      content: string;
+      createdAt: string;
+    }>(`private-user-${me.id}`, 'direct-message', (payload) => {
+      // If the incoming message belongs to currently open conversation, append directly to cache
+      if (activeConversationId && payload.conversationId === activeConversationId) {
+        queryClient.setQueryData<MessageItem[]>(['messages', activeConversationId], (old = []) => {
+          // Avoid duplicate insertion
+          if (
+            old.some(
+              (m) =>
+                m.id === payload.messageId ||
+                (m.clientMessageId && m.clientMessageId === payload.messageId)
+            )
+          ) {
+            return old;
+          }
+          const incoming: MessageItem = {
+            id: payload.messageId,
+            conversationId: payload.conversationId,
+            senderId: payload.senderId,
+            content: payload.content,
+            readAt: new Date().toISOString(),
+            createdAt: payload.createdAt,
+            senderName: null,
+            senderUsername: '',
+            senderAvatar: null,
+            status: 'sent',
+          };
+          return [...old, incoming];
+        });
       }
+
+      // Update conversations sidebar incrementally
+      queryClient.setQueryData<ConversationItem[]>(['conversations'], (old = []) => {
+        let found = false;
+        const updated = old.map((c) => {
+          if (c.id === payload.conversationId) {
+            found = true;
+            return {
+              ...c,
+              lastMessage: payload.content,
+              lastMessageAt: payload.createdAt,
+              unreadCount:
+                payload.conversationId === activeConversationId || payload.senderId === me.id
+                  ? c.unreadCount
+                  : c.unreadCount + 1,
+            };
+          }
+          return c;
+        });
+
+        if (!found) {
+          void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+          return old;
+        }
+
+        return updated.sort((a, b) => {
+          const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+          const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+          return timeB - timeA;
+        });
+      });
     });
+
     return () => {
       unsubscribe();
     };
@@ -160,8 +282,21 @@ function MessagesContent() {
   const handleSend = (e: React.FormEvent) => {
     e.preventDefault();
     const text = messageText.trim();
-    if (!text || !activeConversationId || sendMutation.isPending) return;
-    sendMutation.mutate({ convoId: activeConversationId, text });
+    if (!text || !activeConversationId) return;
+
+    const clientMessageId = crypto.randomUUID();
+    setMessageText('');
+    sendMutation.mutate({ convoId: activeConversationId, text, clientMessageId });
+  };
+
+  const handleRetry = (msg: MessageItem) => {
+    if (!activeConversationId) return;
+    const newId = crypto.randomUUID();
+    // Remove failed item and re-send
+    queryClient.setQueryData<MessageItem[]>(['messages', activeConversationId], (old = []) =>
+      old.filter((m) => m.id !== msg.id)
+    );
+    sendMutation.mutate({ convoId: activeConversationId, text: msg.content, clientMessageId: newId });
   };
 
   const filteredConversations = (conversations || []).filter((c) => {
@@ -318,7 +453,20 @@ function MessagesContent() {
               {/* Messages viewport */}
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
                 {loadingMessages && (
-                  <p className="text-center font-mono text-xs text-muted animate-pulse">Decrypting thread…</p>
+                  <div className="space-y-4 py-4 animate-pulse">
+                    <div className="flex flex-col items-start max-w-[60%]">
+                      <div className="h-9 w-48 rounded-2xl rounded-bl-none bg-raised border border-line" />
+                      <div className="h-2.5 w-12 rounded bg-raised mt-1.5 ml-1" />
+                    </div>
+                    <div className="flex flex-col items-end ml-auto max-w-[60%]">
+                      <div className="h-12 w-64 rounded-2xl rounded-br-none bg-accent/20 border border-accent/20" />
+                      <div className="h-2.5 w-12 rounded bg-raised mt-1.5 mr-1" />
+                    </div>
+                    <div className="flex flex-col items-start max-w-[50%]">
+                      <div className="h-8 w-36 rounded-2xl rounded-bl-none bg-raised border border-line" />
+                      <div className="h-2.5 w-12 rounded bg-raised mt-1.5 ml-1" />
+                    </div>
+                  </div>
                 )}
 
                 {!loadingMessages && (!messages || messages.length === 0) && (
@@ -332,26 +480,58 @@ function MessagesContent() {
 
                 {messages?.map((msg) => {
                   const isMe = msg.senderId === me?.id;
+                  const isSending = msg.status === 'sending';
+                  const isFailed = msg.status === 'failed';
+
                   return (
                     <div
                       key={msg.id}
                       className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
                     >
                       <div
-                        className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-sm ${
+                        className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed shadow-sm transition-all ${
                           isMe
-                            ? 'bg-accent text-black font-medium rounded-br-none'
+                            ? isFailed
+                              ? 'bg-red-500/20 border border-red-500/40 text-red-200 rounded-br-none'
+                              : isSending
+                                ? 'bg-accent/70 text-black font-medium rounded-br-none opacity-80'
+                                : 'bg-accent text-black font-medium rounded-br-none'
                             : 'border border-line bg-raised text-foreground rounded-bl-none'
                         }`}
                       >
                         {msg.content}
                       </div>
-                      <div className="flex items-center gap-1 mt-1 px-1 font-mono text-[9px] text-muted">
+
+                      <div className="flex items-center gap-1.5 mt-1 px-1 font-mono text-[9px] text-muted">
                         <span>
                           {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
-                        {isMe && msg.readAt && (
-                          <CheckCheck size={11} className="text-accent ml-0.5" />
+
+                        {isMe && (
+                          <>
+                            {isSending && (
+                              <span className="flex items-center gap-1 text-accent font-mono text-[9px]">
+                                <Loader2 size={10} className="animate-spin" />
+                                <span>sending...</span>
+                              </span>
+                            )}
+                            {isFailed && (
+                              <span className="flex items-center gap-1.5 text-red-400">
+                                <AlertCircle size={10} />
+                                <span>Failed to send</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRetry(msg)}
+                                  className="underline hover:text-red-300 font-semibold cursor-pointer inline-flex items-center gap-0.5 ml-1"
+                                >
+                                  <RefreshCw size={8} /> Retry
+                                </button>
+                              </span>
+                            )}
+                            {!isSending && !isFailed && msg.readAt && (
+                              <CheckCheck size={11} className="text-accent ml-0.5" />
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -374,18 +554,13 @@ function MessagesContent() {
                   />
                   <button
                     type="submit"
-                    disabled={!messageText.trim() || sendMutation.isPending}
+                    disabled={!messageText.trim()}
                     className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2.5 text-xs font-semibold text-black transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
                   >
                     <Send size={13} />
                     <span className="hidden sm:inline">Send</span>
                   </button>
                 </div>
-                {sendMutation.isError && (
-                  <p className="mt-1.5 font-mono text-[10px] text-red-400">
-                    {sendMutation.error.message}
-                  </p>
-                )}
               </form>
             </>
           ) : (

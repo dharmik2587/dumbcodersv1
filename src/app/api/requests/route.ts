@@ -8,6 +8,7 @@ import { profiles, teamRequests } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
 import { createRequestSchema } from '@/lib/validations/request';
 import { enforceRateLimit } from '@/lib/ratelimit';
+import { triggerPusherEvent } from '@/lib/pusher';
 
 export const runtime = 'nodejs';
 
@@ -33,23 +34,39 @@ export async function POST(request: NextRequest) {
   if (parsed.data.toUserId === userId) return failure('INVALID_RECIPIENT', 'You cannot request yourself.', 400);
 
   const db = getCoreDb();
-  const recipient = await db.select({ id: profiles.id }).from(profiles).where(eq(profiles.id, parsed.data.toUserId)).limit(1);
+  const recipient = await db.select({ id: profiles.id, fullName: profiles.fullName, username: profiles.username }).from(profiles).where(eq(profiles.id, parsed.data.toUserId)).limit(1);
   if (!recipient[0]) return failure('NOT_FOUND', 'Recipient not found.', 404);
 
-  const existing = await db.select({ id: teamRequests.id }).from(teamRequests).where(and(eq(teamRequests.fromUserId, userId), eq(teamRequests.toUserId, parsed.data.toUserId), eq(teamRequests.status, 'pending'))).limit(1);
-  if (existing[0]) return failure('DUPLICATE_REQUEST', 'A pending request already exists.', 409);
+  // Idempotent check: if a pending request already exists, return it instead of throwing 409 error
+  const existing = await db.select().from(teamRequests).where(and(eq(teamRequests.fromUserId, userId), eq(teamRequests.toUserId, parsed.data.toUserId), eq(teamRequests.status, 'pending'))).limit(1);
+  if (existing[0]) {
+    return success(existing[0], { status: 200 });
+  }
 
-  const [created] = await db.insert(teamRequests).values({
-    fromUserId: userId,
-    toUserId: parsed.data.toUserId,
-    teamId: parsed.data.teamId ?? null,
-    hackathonId: parsed.data.hackathonId ?? null,
-    message: parsed.data.message ?? null,
-    roleOffered: parsed.data.roleOffered ?? null,
-  }).returning();
+  let created;
+  try {
+    const [inserted] = await db.insert(teamRequests).values({
+      fromUserId: userId,
+      toUserId: parsed.data.toUserId,
+      teamId: parsed.data.teamId ?? null,
+      hackathonId: parsed.data.hackathonId ?? null,
+      message: parsed.data.message ?? null,
+      roleOffered: parsed.data.roleOffered ?? null,
+    }).returning();
+    created = inserted;
+  } catch (err: unknown) {
+    // If concurrent insert caused unique index collision, return the existing row
+    const fallback = await db.select().from(teamRequests).where(and(eq(teamRequests.fromUserId, userId), eq(teamRequests.toUserId, parsed.data.toUserId), eq(teamRequests.status, 'pending'))).limit(1);
+    if (fallback[0]) {
+      return success(fallback[0], { status: 200 });
+    }
+    console.error('[Requests API] Insertion failed:', err);
+    return failure('CREATE_FAILED', 'Could not create the request.', 500);
+  }
 
   if (!created) return failure('CREATE_FAILED', 'Could not create the request.', 500);
 
+  // Notifications and outbox
   await createNotification({
     userId: parsed.data.toUserId,
     type: 'team_request',
@@ -58,11 +75,31 @@ export async function POST(request: NextRequest) {
     href: '/requests',
     dedupeKey: `request:${created.id}:received`,
   });
+
   await createOutboxEvent({
     eventType: 'team_request.created',
     aggregateType: 'team_request',
     aggregateId: created.id,
     payload: { fromUserId: userId, toUserId: parsed.data.toUserId },
+  });
+
+  // Direct Pusher broadcast to recipient (accelerator, non-blocking)
+  const recipientPusherPayload = {
+    action: 'created',
+    requestId: created.id,
+    fromUserId: userId,
+    toUserId: parsed.data.toUserId,
+    status: created.status,
+    roleOffered: created.roleOffered,
+    teamId: created.teamId,
+    createdAt: created.createdAt instanceof Date ? created.createdAt.toISOString() : created.createdAt,
+  };
+  await triggerPusherEvent(`private-user-${parsed.data.toUserId}`, 'team-request', recipientPusherPayload);
+
+  // Direct Pusher broadcast to sender as well (for multi-tab synchronization)
+  await triggerPusherEvent(`private-user-${userId}`, 'team-request', {
+    ...recipientPusherPayload,
+    action: 'sent',
   });
 
   return success(created, { status: 201 });

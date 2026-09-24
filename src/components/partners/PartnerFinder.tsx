@@ -2,15 +2,16 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { MessageSquare, Send, Sparkles, X, Loader2, Search } from 'lucide-react';
+import { MessageSquare, Send, Sparkles, X, Loader2, Search, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useApiStore } from '@/client/store/apiStore';
 
 type PartnerItem = {
   id: string;
@@ -26,6 +27,9 @@ type PartnerItem = {
     reasons: string[];
     fillsGap?: boolean;
   };
+  requestStatus?: 'none' | 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+  requestDirection?: 'sent' | 'received' | null;
+  requestId?: string | null;
 };
 
 const requestSchema = z.object({
@@ -74,6 +78,30 @@ export function PartnerFinder({ initialTeamId }: PartnerFinderProps) {
 
   const messageVal = watch('message') || '';
 
+  // Synchronize requests from server to derive instant relationship status
+  const { data: requestsData } = useQuery<{ request?: { toUserId: string; fromUserId: string; status: string }; toUserId?: string; fromUserId?: string; status?: string }[]>({
+    queryKey: ['requests', 'all'],
+    queryFn: async () => {
+      const response = await fetch('/api/requests?direction=all', { credentials: 'include' });
+      const body = await response.json().catch(() => null);
+      return body?.data ?? [];
+    },
+    staleTime: 10000,
+  });
+
+  const activeRequestByUserId = useMemo(() => {
+    const map = new Map<string, string>();
+    if (Array.isArray(requestsData)) {
+      for (const item of requestsData) {
+        const req = item.request ?? item;
+        if (req.toUserId) {
+          map.set(req.toUserId, req.status ?? 'pending');
+        }
+      }
+    }
+    return map;
+  }, [requestsData]);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['partners', query, teamId],
     queryFn: async () => {
@@ -102,11 +130,29 @@ export function PartnerFinder({ initialTeamId }: PartnerFinderProps) {
       if (!response.ok) throw new Error(body?.error?.message ?? 'Could not send request');
       return body.data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       toast.success('Collaboration request sent successfully');
       setSelectedPartner(null);
       reset();
+
+      // Optimistically update partner query cache
+      queryClient.setQueriesData({ queryKey: ['partners'] }, (old: unknown) => {
+        const prev = old as { data: PartnerItem[]; meta: { total: number } } | undefined;
+        if (!prev?.data) return old;
+        return {
+          ...prev,
+          data: prev.data.map((p) =>
+            p.id === variables.toUserId
+              ? { ...p, requestStatus: 'pending' as const, requestDirection: 'sent' as const }
+              : p
+          ),
+        };
+      });
+
+      // Target revalidation
       void queryClient.invalidateQueries({ queryKey: ['requests'] });
+      void queryClient.invalidateQueries({ queryKey: ['partners'] });
+      void useApiStore.getState().loadRequests();
     },
     onError: (err: unknown) => {
       toast.error(err instanceof Error ? err.message : 'Could not send request');
@@ -279,13 +325,70 @@ export function PartnerFinder({ initialTeamId }: PartnerFinderProps) {
                   {partner.compatibility.reasons.join(' · ') || 'Open to collaboration'}
                 </p>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPartner(partner)}
-                    className="flex-1 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-accent-ink"
-                  >
-                    Send request
-                  </button>
+                  {(() => {
+                    const reqStatus = activeRequestByUserId.get(partner.id) || partner.requestStatus || 'none';
+                    const isPendingMutation = sendRequestMutation.isPending && sendRequestMutation.variables?.toUserId === partner.id;
+
+                    if (isPendingMutation) {
+                      return (
+                        <button
+                          type="button"
+                          disabled
+                          className="flex-1 rounded-xl bg-accent/80 px-4 py-2.5 text-sm font-semibold text-black cursor-wait flex items-center justify-center gap-1.5"
+                        >
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Sending...</span>
+                        </button>
+                      );
+                    }
+
+                    if (reqStatus === 'pending') {
+                      return (
+                        <button
+                          type="button"
+                          disabled
+                          className="flex-1 rounded-xl bg-surface border border-accent/40 px-4 py-2.5 text-sm font-medium text-accent cursor-default flex items-center justify-center gap-1.5"
+                        >
+                          <Check size={14} className="text-accent" />
+                          <span>Sent</span>
+                        </button>
+                      );
+                    }
+
+                    if (reqStatus === 'accepted') {
+                      return (
+                        <Link
+                          href={`/messages?user=${partner.id}`}
+                          className="flex-1 rounded-xl bg-mint/10 border border-mint/30 px-4 py-2.5 text-sm font-semibold text-mint hover:bg-mint/20 transition flex items-center justify-center gap-1.5"
+                        >
+                          <Check size={14} />
+                          <span>Connected</span>
+                        </Link>
+                      );
+                    }
+
+                    if (reqStatus === 'rejected' || reqStatus === 'withdrawn') {
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPartner(partner)}
+                          className="flex-1 rounded-xl bg-raised border border-line px-4 py-2.5 text-sm font-semibold text-fg hover:border-accent-line transition"
+                        >
+                          Send again
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPartner(partner)}
+                        className="flex-1 rounded-xl bg-accent px-4 py-2.5 text-sm font-semibold text-black transition hover:bg-accent-ink"
+                      >
+                        Send request
+                      </button>
+                    );
+                  })()}
                   <Link
                     href={`/messages?user=${partner.id}`}
                     className="flex items-center justify-center rounded-xl border border-line bg-raised px-3 py-2.5 text-sm font-medium text-fg hover:border-accent-line transition"

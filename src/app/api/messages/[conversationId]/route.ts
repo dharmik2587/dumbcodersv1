@@ -49,6 +49,7 @@ export async function POST(
     return rateCheck.response!;
   }
 
+  const startTime = performance.now();
   try {
     const { conversationId } = await context.params;
     const body = await request.json().catch(() => null);
@@ -58,14 +59,17 @@ export async function POST(
       return failure('BAD_REQUEST', parsed.error.issues[0]?.message ?? 'Invalid message content.', 400);
     }
 
+    const dbStart = performance.now();
     const { message, recipientId } = await sendDirectMessage(
       conversationId,
       userId,
       parsed.data.content,
       parsed.data.clientMessageId
     );
+    const dbDuration = Math.round(performance.now() - dbStart);
 
     // Notify recipient via Pusher on private authorized channel
+    const pusherStart = performance.now();
     const pusherChannel = `private-user-${recipientId}`;
     const pusherPayload = {
       messageId: message.id,
@@ -76,6 +80,9 @@ export async function POST(
     };
 
     const pusherResult = await triggerPusherEvent(pusherChannel, 'direct-message', pusherPayload);
+    // Also dispatch to sender channel for multi-tab sync
+    await triggerPusherEvent(`private-user-${userId}`, 'direct-message', pusherPayload);
+    const pusherDuration = Math.round(performance.now() - pusherStart);
 
     // Write to outbox_events to guarantee auditability and retry capability
     try {
@@ -95,6 +102,9 @@ export async function POST(
     } catch (outboxError) {
       console.error('[DM Outbox] Failed to record outbox event:', outboxError);
     }
+
+    const totalDuration = Math.round(performance.now() - startTime);
+    console.log(`[DM API] conversationId=${conversationId} db=${dbDuration}ms pusher=${pusherDuration}ms total=${totalDuration}ms`);
 
     // Always return HTTP 201 as message is safely committed to Postgres
     return success(message, { status: 201 });

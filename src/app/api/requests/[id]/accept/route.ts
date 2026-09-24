@@ -7,6 +7,7 @@ import { getRequestById } from '@/lib/db/queries/requests';
 import { notifications, outboxEvents, profiles, teamMembers, teamRequests } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
 import { enforceRateLimit } from '@/lib/ratelimit';
+import { triggerPusherEvent } from '@/lib/pusher';
 
 export const runtime = 'nodejs';
 
@@ -105,6 +106,18 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         },
       };
     });
+
+    // Accelerated real-time dispatch via Pusher
+    const pusherPayload = {
+      action: 'accepted',
+      requestId: id,
+      fromUserId: result.request.fromUserId,
+      toUserId: result.request.toUserId,
+      status: 'accepted',
+      conversationId: result.conversation.id,
+    };
+    await triggerPusherEvent(`private-user-${result.request.fromUserId}`, 'team-request', pusherPayload);
+    await triggerPusherEvent(`private-user-${userId}`, 'team-request', pusherPayload);
 
     return success(result);
   } catch (err: unknown) {

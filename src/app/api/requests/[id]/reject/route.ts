@@ -7,6 +7,7 @@ import { getRequestById } from '@/lib/db/queries/requests';
 import { teamRequests } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
 import { enforceRateLimit } from '@/lib/ratelimit';
+import { triggerPusherEvent } from '@/lib/pusher';
 
 export const runtime = 'nodejs';
 
@@ -28,5 +29,16 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   if (!updated) return failure('REQUEST_NOT_PENDING', 'This request is no longer pending.', 409);
   await createNotification({ userId: updated.fromUserId, type: 'request_rejected', title: 'Request declined', message: 'Your collaboration request was declined.', href: '/requests', dedupeKey: `request:${id}:rejected` });
   await createOutboxEvent({ eventType: 'team_request.rejected', aggregateType: 'team_request', aggregateId: id, payload: { fromUserId: updated.fromUserId, toUserId: updated.toUserId } });
+
+  const pusherPayload = {
+    action: 'rejected',
+    requestId: id,
+    fromUserId: updated.fromUserId,
+    toUserId: updated.toUserId,
+    status: 'rejected',
+  };
+  await triggerPusherEvent(`private-user-${updated.fromUserId}`, 'team-request', pusherPayload);
+  await triggerPusherEvent(`private-user-${userId}`, 'team-request', pusherPayload);
+
   return success(updated);
 }

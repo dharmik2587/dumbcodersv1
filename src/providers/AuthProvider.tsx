@@ -19,6 +19,13 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 });
 
+import { useRequestSync } from '@/client/hooks/useRequestSync';
+
+function RequestSyncListener({ userId }: { userId: string }) {
+  useRequestSync(userId);
+  return null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -65,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
+      {user?.id ? <RequestSyncListener userId={user.id} /> : null}
       {children}
     </AuthContext.Provider>
   );

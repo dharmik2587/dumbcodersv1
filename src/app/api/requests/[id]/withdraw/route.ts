@@ -6,6 +6,7 @@ import { getRequestById } from '@/lib/db/queries/requests';
 import { teamRequests } from '@/lib/db/schema/core';
 import { failure, success } from '@/lib/http';
 import { enforceRateLimit } from '@/lib/ratelimit';
+import { triggerPusherEvent } from '@/lib/pusher';
 
 export const runtime = 'nodejs';
 
@@ -25,5 +26,16 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   const db = getCoreDb();
   const [updated] = await db.update(teamRequests).set({ status: 'withdrawn', updatedAt: new Date() }).where(and(eq(teamRequests.id, id), eq(teamRequests.status, 'pending'))).returning();
   if (!updated) return failure('REQUEST_NOT_PENDING', 'This request is no longer pending.', 409);
+
+  const pusherPayload = {
+    action: 'withdrawn',
+    requestId: id,
+    fromUserId: updated.fromUserId,
+    toUserId: updated.toUserId,
+    status: 'withdrawn',
+  };
+  await triggerPusherEvent(`private-user-${updated.toUserId}`, 'team-request', pusherPayload);
+  await triggerPusherEvent(`private-user-${userId}`, 'team-request', pusherPayload);
+
   return success(updated);
 }

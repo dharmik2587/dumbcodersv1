@@ -412,6 +412,18 @@ function CandidateRow({
   onCompose: () => void;
 }) {
   const b = c.builder;
+  const requests = useApiStore((s) => s.requests);
+  const me = useMe();
+  const existingReq = useMemo(() => {
+    return (requests as any[]).find((r) => {
+      const toId = r.request?.toUserId ?? r.toUserId;
+      const fromId = r.request?.fromUserId ?? r.fromUserId;
+      return (toId === b.id && fromId === me?.id) || (toId === me?.id && fromId === b.id);
+    });
+  }, [requests, b.id, me?.id]);
+
+  const reqStatus = existingReq?.request?.status ?? existingReq?.status;
+
   return (
     <div className={cn("border border-line bg-surface transition-colors", open && "border-accent-line")}>
       <button onClick={onToggle} className="flex w-full items-start gap-4 px-4 py-4 text-left transition-colors hover:bg-hover">
@@ -489,9 +501,25 @@ function CandidateRow({
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={onCompose}>
-                    <UserPlus size={12} /> Send request
-                  </Button>
+                  {reqStatus === "pending" ? (
+                    <Button size="sm" disabled variant="outline" className="border-accent/40 text-accent cursor-default">
+                      <Check size={12} className="text-accent" /> Sent
+                    </Button>
+                  ) : reqStatus === "accepted" ? (
+                    <Link href={`/messages?user=${b.id}`}>
+                      <Button size="sm" variant="outline" className="border-mint/40 text-mint hover:bg-mint/10">
+                        <Check size={12} /> Connected
+                      </Button>
+                    </Link>
+                  ) : reqStatus === "rejected" || reqStatus === "withdrawn" ? (
+                    <Button size="sm" onClick={onCompose}>
+                      <UserPlus size={12} /> Send again
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={onCompose}>
+                      <UserPlus size={12} /> Send request
+                    </Button>
+                  )}
                   <Link href={`/b/${b.id}`}>
                     <Button size="sm" variant="outline">Profile</Button>
                   </Link>
@@ -616,7 +644,19 @@ function BuilderProfile() {
     enabled: !!id,
   });
 
+  const requests = useApiStore((s) => s.requests);
   const b = builders.find((x) => x.id === id);
+
+  const existingReq = useMemo(() => {
+    if (!b?.id) return null;
+    return (requests as any[]).find((r) => {
+      const toId = r.request?.toUserId ?? r.toUserId;
+      const fromId = r.request?.fromUserId ?? r.fromUserId;
+      return (toId === b.id && fromId === me?.id) || (toId === me?.id && fromId === b.id);
+    });
+  }, [requests, b?.id, me?.id]);
+  const reqStatus = existingReq?.request?.status ?? existingReq?.status;
+
   if (!b)
     return (
       <EmptyState
@@ -688,9 +728,25 @@ function BuilderProfile() {
               No active team — complement score unavailable.
             </div>
           )}
-          <Button onClick={() => requireAuth("send a collaboration request", () => setComposing(true))}>
-            <UserPlus size={13} /> Send request
-          </Button>
+          {reqStatus === "pending" ? (
+            <Button disabled variant="outline" className="border-accent/40 text-accent cursor-default">
+              <Check size={13} className="text-accent" /> Sent
+            </Button>
+          ) : reqStatus === "accepted" ? (
+            <Link href={`/messages?user=${b.id}`}>
+              <Button variant="outline" className="border-mint/40 text-mint hover:bg-mint/10">
+                <Check size={13} /> Connected
+              </Button>
+            </Link>
+          ) : reqStatus === "rejected" || reqStatus === "withdrawn" ? (
+            <Button onClick={() => requireAuth("send a collaboration request", () => setComposing(true))}>
+              <UserPlus size={13} /> Send again
+            </Button>
+          ) : (
+            <Button onClick={() => requireAuth("send a collaboration request", () => setComposing(true))}>
+              <UserPlus size={13} /> Send request
+            </Button>
+          )}
         </div>
       </Reveal>
 

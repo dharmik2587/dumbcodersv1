@@ -1,6 +1,6 @@
-import { and, count, eq, ilike, not, or, sql } from 'drizzle-orm';
+import { and, count, eq, ilike, inArray, not, or, sql } from 'drizzle-orm';
 import { getCoreDb } from '@/lib/db/core';
-import { colleges, githubData, profiles, teamMembers, teams } from '@/lib/db/schema/core';
+import { colleges, githubData, profiles, teamMembers, teamRequests, teams } from '@/lib/db/schema/core';
 import { compatibilityScore, type TeamContext } from '@/lib/compatibility';
 
 const TEAM_ROLES = ['frontend', 'backend', 'ml', 'design', 'pitch'];
@@ -77,6 +77,42 @@ export async function searchPartners(input: {
     db.select({ total: count() }).from(profiles).where(where),
   ]);
 
+  // Query existing request relationships for these candidate profiles
+  const candidateUserIds = rows.map((r) => r.profile.id);
+  const existingReqs = input.currentUserId && candidateUserIds.length > 0
+    ? await db
+        .select({
+          id: teamRequests.id,
+          fromUserId: teamRequests.fromUserId,
+          toUserId: teamRequests.toUserId,
+          status: teamRequests.status,
+        })
+        .from(teamRequests)
+        .where(
+          and(
+            or(
+              and(eq(teamRequests.fromUserId, input.currentUserId), inArray(teamRequests.toUserId, candidateUserIds)),
+              and(eq(teamRequests.toUserId, input.currentUserId), inArray(teamRequests.fromUserId, candidateUserIds)),
+            ),
+          ),
+        )
+    : [];
+
+  const reqMap = new Map<string, { status: string; direction: 'sent' | 'received'; requestId: string }>();
+  for (const req of existingReqs) {
+    const isSent = req.fromUserId === input.currentUserId;
+    const partnerId = isSent ? req.toUserId : req.fromUserId;
+    const existing = reqMap.get(partnerId);
+    // Prioritize pending/accepted over historical rejected/withdrawn
+    if (!existing || req.status === 'pending' || req.status === 'accepted') {
+      reqMap.set(partnerId, {
+        status: req.status,
+        direction: isSent ? 'sent' : 'received',
+        requestId: req.id,
+      });
+    }
+  }
+
   const current = currentProfile[0];
   const data = rows
     .map((row) => {
@@ -89,7 +125,17 @@ export async function searchPartners(input: {
             team: teamContext,
           })
         : { score: 0, reasons: [] as string[], fillsGap: false };
-      return { ...row.profile, college: row.college, github: row.github, compatibility: match };
+
+      const reqInfo = reqMap.get(row.profile.id);
+      return {
+        ...row.profile,
+        college: row.college,
+        github: row.github,
+        compatibility: match,
+        requestStatus: (reqInfo ? reqInfo.status : 'none') as 'none' | 'pending' | 'accepted' | 'rejected' | 'withdrawn',
+        requestDirection: reqInfo ? reqInfo.direction : null,
+        requestId: reqInfo ? reqInfo.requestId : null,
+      };
     })
     .sort((a, b) => b.compatibility.score - a.compatibility.score);
 
