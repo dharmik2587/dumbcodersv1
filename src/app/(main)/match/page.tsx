@@ -440,7 +440,8 @@ function CandidateRow({
   const requests = useApiStore((s) => s.requests);
   const me = useMe();
   const existingReq = useMemo(() => {
-    return (requests as any[]).find((r) => {
+    return ((requests || []) as any[]).find((r) => {
+      if (!r) return false;
       const toId = r.request?.toUserId ?? r.toUserId;
       const fromId = r.request?.fromUserId ?? r.fromUserId;
       return (toId === b.id && fromId === me?.id) || (toId === me?.id && fromId === b.id);
@@ -669,7 +670,8 @@ function BuilderProfile() {
 
   const existingReq = useMemo(() => {
     if (!b?.id) return null;
-    return (requests as any[]).find((r) => {
+    return ((requests || []) as any[]).find((r) => {
+      if (!r) return false;
       const toId = r.request?.toUserId ?? r.toUserId;
       const fromId = r.request?.fromUserId ?? r.fromUserId;
       return (toId === b.id && fromId === me?.id) || (toId === me?.id && fromId === b.id);

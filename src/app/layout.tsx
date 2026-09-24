@@ -30,13 +30,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           speed={200}
           shadow="0 0 10px var(--accent),0 0 5px var(--accent)"
         />
-        <AuthProvider>
-          <QueryProvider>
+        <QueryProvider>
+          <AuthProvider>
             <ThemeProvider>
               <GuestAuthProvider>{children}</GuestAuthProvider>
             </ThemeProvider>
-          </QueryProvider>
-        </AuthProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );

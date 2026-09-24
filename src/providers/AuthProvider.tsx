@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/client';
 import { useApiStore } from '@/client/store/apiStore';
+import { useRequestSync } from '@/client/hooks/useRequestSync';
 
 type AuthContextType = {
   user: User | null;
@@ -18,8 +19,6 @@ const AuthContext = createContext<AuthContextType>({
   isLoading: true,
   signOut: async () => {},
 });
-
-import { useRequestSync } from '@/client/hooks/useRequestSync';
 
 function RequestSyncListener({ userId }: { userId: string }) {
   useRequestSync(userId);

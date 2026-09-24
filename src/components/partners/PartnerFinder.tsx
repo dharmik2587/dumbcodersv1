@@ -93,8 +93,9 @@ export function PartnerFinder({ initialTeamId }: PartnerFinderProps) {
     const map = new Map<string, string>();
     if (Array.isArray(requestsData)) {
       for (const item of requestsData) {
+        if (!item) continue;
         const req = item.request ?? item;
-        if (req.toUserId) {
+        if (req && req.toUserId) {
           map.set(req.toUserId, req.status ?? 'pending');
         }
       }
