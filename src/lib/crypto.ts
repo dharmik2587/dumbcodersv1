@@ -8,6 +8,9 @@ import type { SQL } from 'drizzle-orm';
 export function getMessageEncryptionKey(): string {
   const key = process.env.MESSAGE_ENCRYPTION_KEY;
   if (!key) {
+    if (process.env.NODE_ENV !== 'production') {
+      return 'dev-message-encryption-secret-key-32b!';
+    }
     throw new Error(
       '[crypto] MESSAGE_ENCRYPTION_KEY is required but not set. ' +
       'Add it to your .env file. Do NOT reuse SUPABASE_SERVICE_ROLE_KEY — ' +

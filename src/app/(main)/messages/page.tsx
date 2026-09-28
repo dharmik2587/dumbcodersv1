@@ -46,11 +46,98 @@ function generateUUID(): string {
   });
 }
 
+function ConversationListSkeleton() {
+  return (
+    <div className="divide-y divide-line/30">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="flex items-start gap-3 p-3.5 animate-pulse">
+          <div className="h-10 w-10 shrink-0 rounded-full bg-raised border border-line/60" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="h-3.5 w-24 rounded bg-raised" />
+              <div className="h-2.5 w-8 rounded bg-raised/70" />
+            </div>
+            <div className="h-2.5 w-16 rounded bg-raised/60" />
+            <div className="h-3 w-40 rounded bg-raised/40 mt-1" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MessageThreadSkeleton() {
+  return (
+    <div className="space-y-4 py-4 animate-pulse">
+      <div className="flex flex-col items-start max-w-[65%] space-y-1">
+        <div className="h-10 w-52 rounded-2xl rounded-bl-none bg-raised border border-line" />
+        <div className="h-2.5 w-12 rounded bg-raised/60 mt-1 ml-1" />
+      </div>
+
+      <div className="flex flex-col items-end ml-auto max-w-[65%] space-y-1">
+        <div className="h-12 w-64 rounded-2xl rounded-br-none bg-accent/20 border border-accent/30" />
+        <div className="h-2.5 w-12 rounded bg-raised/60 mt-1 mr-1" />
+      </div>
+
+      <div className="flex flex-col items-start max-w-[55%] space-y-1">
+        <div className="h-8 w-40 rounded-2xl rounded-bl-none bg-raised border border-line" />
+        <div className="h-2.5 w-12 rounded bg-raised/60 mt-1 ml-1" />
+      </div>
+
+      <div className="flex flex-col items-end ml-auto max-w-[70%] space-y-1">
+        <div className="h-14 w-72 rounded-2xl rounded-br-none bg-accent/20 border border-accent/30" />
+        <div className="h-2.5 w-12 rounded bg-raised/60 mt-1 mr-1" />
+      </div>
+
+      <div className="flex flex-col items-start max-w-[60%] space-y-1">
+        <div className="h-11 w-48 rounded-2xl rounded-bl-none bg-raised border border-line" />
+        <div className="h-2.5 w-12 rounded bg-raised/60 mt-1 ml-1" />
+      </div>
+    </div>
+  );
+}
+
+function MessagesPageSkeleton() {
+  return (
+    <div className="mx-auto max-w-[1400px] h-[calc(100vh-140px)] min-h-[600px] flex flex-col">
+      <div className="border-b border-line pb-4 mb-4 flex items-center justify-between">
+        <div>
+          <div className="h-3 w-28 rounded bg-raised mb-2" />
+          <div className="h-7 w-48 rounded bg-raised" />
+        </div>
+      </div>
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-12 rounded-2xl border border-line bg-surface overflow-hidden shadow-xl">
+        <div className="hidden md:flex md:col-span-4 border-r border-line flex-col bg-surface/80">
+          <div className="p-3.5 border-b border-line">
+            <div className="h-8 rounded-xl bg-raised border border-line" />
+          </div>
+          <ConversationListSkeleton />
+        </div>
+        <div className="md:col-span-8 flex flex-col bg-surface">
+          <div className="border-b border-line px-5 py-3.5 bg-raised/40 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-full bg-raised" />
+              <div className="space-y-1.5">
+                <div className="h-3.5 w-24 rounded bg-raised" />
+                <div className="h-2.5 w-16 rounded bg-raised/60" />
+              </div>
+            </div>
+            <div className="h-7 w-20 rounded-xl bg-raised" />
+          </div>
+          <div className="flex-1 p-5">
+            <MessageThreadSkeleton />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MessagesContent() {
   const me = useMe();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const initialUserId = searchParams.get('userId');
+  const initialUserId = searchParams.get('userId') || searchParams.get('user');
   const initialConversationId = searchParams.get('conversationId');
   const queryClient = useQueryClient();
 
@@ -352,13 +439,7 @@ function MessagesContent() {
           </div>
 
           <div className="flex-1 overflow-y-auto divide-y divide-line/40">
-            {loadingConversations && (
-              <div className="p-4 space-y-3">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-16 rounded-xl bg-raised animate-pulse" />
-                ))}
-              </div>
-            )}
+            {loadingConversations && <ConversationListSkeleton />}
 
             {!loadingConversations && filteredConversations.length === 0 && (
               <div className="p-8 text-center text-muted">
@@ -463,22 +544,7 @@ function MessagesContent() {
 
               {/* Messages viewport */}
               <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                {loadingMessages && (
-                  <div className="space-y-4 py-4 animate-pulse">
-                    <div className="flex flex-col items-start max-w-[60%]">
-                      <div className="h-9 w-48 rounded-2xl rounded-bl-none bg-raised border border-line" />
-                      <div className="h-2.5 w-12 rounded bg-raised mt-1.5 ml-1" />
-                    </div>
-                    <div className="flex flex-col items-end ml-auto max-w-[60%]">
-                      <div className="h-12 w-64 rounded-2xl rounded-br-none bg-accent/20 border border-accent/20" />
-                      <div className="h-2.5 w-12 rounded bg-raised mt-1.5 mr-1" />
-                    </div>
-                    <div className="flex flex-col items-start max-w-[50%]">
-                      <div className="h-8 w-36 rounded-2xl rounded-bl-none bg-raised border border-line" />
-                      <div className="h-2.5 w-12 rounded bg-raised mt-1.5 ml-1" />
-                    </div>
-                  </div>
-                )}
+                {loadingMessages && <MessageThreadSkeleton />}
 
                 {!loadingMessages && (!messages || messages.length === 0) && (
                   <div className="h-full flex flex-col items-center justify-center text-center text-muted p-6">
@@ -589,7 +655,7 @@ function MessagesContent() {
 
 export default function MessagesPage() {
   return (
-    <Suspense fallback={<div className="h-64 flex items-center justify-center text-muted font-mono text-xs animate-pulse">Loading messenger…</div>}>
+    <Suspense fallback={<MessagesPageSkeleton />}>
       <MessagesContent />
     </Suspense>
   );

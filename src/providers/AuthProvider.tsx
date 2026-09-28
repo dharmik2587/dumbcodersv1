@@ -69,9 +69,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.location.href = '/sign-in';
   };
 
+  const meId = useApiStore((s) => s.me?.id);
+  const effectiveUserId = user?.id || meId;
+
   return (
     <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
-      {user?.id ? <RequestSyncListener userId={user.id} /> : null}
+      {effectiveUserId ? <RequestSyncListener userId={effectiveUserId} /> : null}
       {children}
     </AuthContext.Provider>
   );

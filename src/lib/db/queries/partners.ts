@@ -1,4 +1,4 @@
-import { and, count, eq, ilike, inArray, not, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, ilike, inArray, not, or, sql } from 'drizzle-orm';
 import { getCoreDb } from '@/lib/db/core';
 import { colleges, githubData, profiles, teamMembers, teamRequests, teams } from '@/lib/db/schema/core';
 import { compatibilityScore, type TeamContext } from '@/lib/compatibility';
@@ -86,6 +86,7 @@ export async function searchPartners(input: {
           fromUserId: teamRequests.fromUserId,
           toUserId: teamRequests.toUserId,
           status: teamRequests.status,
+          createdAt: teamRequests.createdAt,
         })
         .from(teamRequests)
         .where(
@@ -96,6 +97,7 @@ export async function searchPartners(input: {
             ),
           ),
         )
+        .orderBy(desc(teamRequests.createdAt))
     : [];
 
   const reqMap = new Map<string, { status: string; direction: 'sent' | 'received'; requestId: string }>();
@@ -103,13 +105,31 @@ export async function searchPartners(input: {
     const isSent = req.fromUserId === input.currentUserId;
     const partnerId = isSent ? req.toUserId : req.fromUserId;
     const existing = reqMap.get(partnerId);
-    // Prioritize pending/accepted over historical rejected/withdrawn
-    if (!existing || req.status === 'pending' || req.status === 'accepted') {
+
+    // Attribution hierarchy:
+    // 1. 'accepted' (active connection)
+    // 2. 'pending' (active pending request)
+    // 3. 'rejected' / 'withdrawn' (historical, only set if no active state yet)
+    if (!existing) {
       reqMap.set(partnerId, {
         status: req.status,
         direction: isSent ? 'sent' : 'received',
         requestId: req.id,
       });
+    } else if (existing.status !== 'accepted') {
+      if (req.status === 'accepted') {
+        reqMap.set(partnerId, {
+          status: 'accepted',
+          direction: isSent ? 'sent' : 'received',
+          requestId: req.id,
+        });
+      } else if (existing.status !== 'pending' && req.status === 'pending') {
+        reqMap.set(partnerId, {
+          status: 'pending',
+          direction: isSent ? 'sent' : 'received',
+          requestId: req.id,
+        });
+      }
     }
   }
 

@@ -115,6 +115,9 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       toUserId: result.request.toUserId,
       status: 'accepted',
       conversationId: result.conversation.id,
+      teamId: result.request.teamId,
+      roleOffered: result.request.roleOffered,
+      createdAt: result.request.createdAt instanceof Date ? result.request.createdAt.toISOString() : result.request.createdAt,
     };
     await triggerPusherEvent(`private-user-${result.request.fromUserId}`, 'team-request', pusherPayload);
     await triggerPusherEvent(`private-user-${userId}`, 'team-request', pusherPayload);

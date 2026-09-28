@@ -69,6 +69,9 @@ export type Builder = {
   openToTeams: boolean;
   verified: boolean;
   lastActive: string;
+  requestStatus?: 'none' | 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+  requestDirection?: 'sent' | 'received' | null;
+  requestId?: string | null;
 };
 
 export type Hackathon = {

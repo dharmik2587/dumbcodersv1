@@ -36,6 +36,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
     fromUserId: updated.fromUserId,
     toUserId: updated.toUserId,
     status: 'rejected',
+    createdAt: updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() : updated.updatedAt,
   };
   await triggerPusherEvent(`private-user-${updated.fromUserId}`, 'team-request', pusherPayload);
   await triggerPusherEvent(`private-user-${userId}`, 'team-request', pusherPayload);

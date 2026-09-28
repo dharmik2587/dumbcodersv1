@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Send, MessageSquare, AlertCircle } from 'lucide-react';
+import { subscribeChannel } from '@/client/lib/pusher-client';
 
 type MessageItem = {
   id: string;
@@ -13,13 +14,45 @@ type MessageItem = {
   authorUsername: string;
   authorAvatar: string | null;
   authorStudentCode: string | null;
+  status?: 'sending' | 'sent' | 'failed';
 };
+
+function TeamMessagesSkeleton() {
+  return (
+    <div className="space-y-4 p-2 animate-pulse">
+      <div className="flex flex-col items-start max-w-[75%] space-y-1">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="h-3 w-16 rounded bg-raised" />
+          <div className="h-2.5 w-10 rounded bg-raised/60" />
+        </div>
+        <div className="h-9 w-48 rounded border border-line bg-raised" />
+      </div>
+
+      <div className="flex flex-col items-end ml-auto max-w-[75%] space-y-1">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="h-3 w-14 rounded bg-raised" />
+          <div className="h-2.5 w-10 rounded bg-raised/60" />
+        </div>
+        <div className="h-12 w-60 rounded border border-accent/20 bg-accent/20" />
+      </div>
+
+      <div className="flex flex-col items-start max-w-[70%] space-y-1">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="h-3 w-20 rounded bg-raised" />
+          <div className="h-2.5 w-10 rounded bg-raised/60" />
+        </div>
+        <div className="h-8 w-40 rounded border border-line bg-raised" />
+      </div>
+    </div>
+  );
+}
 
 export function TeamChat({ teamId, currentUserId }: { teamId: string; currentUserId: string }) {
   const [content, setContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
+  // Load team messages without aggressive polling; relies on Pusher real-time events + focus fallback
   const { data: messages, isLoading, error } = useQuery<MessageItem[]>({
     queryKey: ['team-messages', teamId],
     queryFn: async () => {
@@ -31,12 +64,42 @@ export function TeamChat({ teamId, currentUserId }: { teamId: string; currentUse
         throw new Error(body?.error?.message || `Failed to load messages (${res.status})`);
       }
       const body = await res.json();
-      return body.data;
+      return (body.data as MessageItem[]).map((m) => ({ ...m, status: 'sent' as const }));
     },
-    refetchInterval: 3000,
+    refetchOnWindowFocus: true,
     enabled: Boolean(teamId),
   });
 
+  // Pusher real-time accelerated subscription (replaces 3s polling loop)
+  useEffect(() => {
+    if (!teamId) return;
+
+    const channelName = `team-${teamId}`;
+    const unsubscribe = subscribeChannel<MessageItem>(channelName, 'new_message', (newMsg) => {
+      queryClient.setQueryData<MessageItem[]>(['team-messages', teamId], (old = []) => {
+        // Prevent duplicate appending
+        if (old.some((m) => m.id === newMsg.id)) {
+          return old;
+        }
+        // If an optimistic message from this user with matching content exists, reconcile it
+        const matchingOptimisticIndex = old.findIndex(
+          (m) => m.userId === newMsg.userId && m.content === newMsg.content && m.status === 'sending'
+        );
+        if (matchingOptimisticIndex !== -1) {
+          const updated = [...old];
+          updated[matchingOptimisticIndex] = { ...newMsg, status: 'sent' };
+          return updated;
+        }
+        return [...old, { ...newMsg, status: 'sent' }];
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [teamId, queryClient]);
+
+  // Optimistic sending mutation
   const sendMutation = useMutation({
     mutationFn: async (text: string) => {
       const res = await fetch(`/api/teams/${teamId}/messages`, {
@@ -51,8 +114,37 @@ export function TeamChat({ teamId, currentUserId }: { teamId: string; currentUse
       }
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['team-messages', teamId] });
+    onMutate: async (text: string) => {
+      await queryClient.cancelQueries({ queryKey: ['team-messages', teamId] });
+      const previousMessages = queryClient.getQueryData<MessageItem[]>(['team-messages', teamId]) || [];
+
+      const tempId = `temp-${Date.now()}`;
+      const optimisticMsg: MessageItem = {
+        id: tempId,
+        content: text,
+        createdAt: new Date().toISOString(),
+        userId: currentUserId,
+        authorName: null,
+        authorUsername: 'You',
+        authorAvatar: null,
+        authorStudentCode: null,
+        status: 'sending',
+      };
+
+      queryClient.setQueryData<MessageItem[]>(['team-messages', teamId], [...previousMessages, optimisticMsg]);
+      return { previousMessages, tempId };
+    },
+    onSuccess: (data, _variables, context) => {
+      if (data?.data && context?.tempId) {
+        queryClient.setQueryData<MessageItem[]>(['team-messages', teamId], (old = []) =>
+          old.map((m) => (m.id === context.tempId ? { ...data.data, status: 'sent' } : m))
+        );
+      }
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previousMessages) {
+        queryClient.setQueryData(['team-messages', teamId], context.previousMessages);
+      }
     },
   });
 
@@ -86,9 +178,7 @@ export function TeamChat({ teamId, currentUserId }: { teamId: string; currentUse
 
       {/* Messages viewport */}
       <div className="flex-1 overflow-y-auto p-5 space-y-4">
-        {isLoading && (
-          <p className="text-center text-[12px] text-fg3 animate-pulse">loading messages…</p>
-        )}
+        {isLoading && <TeamMessagesSkeleton />}
 
         {error && (
           <div className="flex items-center gap-2 border border-amber-line bg-amber-soft px-3 py-2 text-[12px] text-amber">
@@ -106,6 +196,8 @@ export function TeamChat({ teamId, currentUserId }: { teamId: string; currentUse
 
         {messages?.map((msg) => {
           const isMe = msg.userId === currentUserId;
+          const isSending = msg.status === 'sending';
+
           return (
             <div
               key={msg.id}
@@ -123,11 +215,16 @@ export function TeamChat({ teamId, currentUserId }: { teamId: string; currentUse
                 <span className="font-mono text-[9px] text-fg3">
                   {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
+                {isSending && (
+                  <span className="font-mono text-[8px] text-accent animate-pulse">sending...</span>
+                )}
               </div>
               <div
-                className={`max-w-[75%] px-3.5 py-2 text-[13px] leading-relaxed ${
+                className={`max-w-[75%] px-3.5 py-2 text-[13px] leading-relaxed transition-opacity ${
                   isMe
-                    ? 'bg-accent text-white'
+                    ? isSending
+                      ? 'bg-accent/70 text-white'
+                      : 'bg-accent text-white'
                     : 'border border-line bg-raised text-fg'
                 }`}
               >

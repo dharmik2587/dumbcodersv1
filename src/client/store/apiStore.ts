@@ -96,6 +96,9 @@ export function mapProfileToBuilder(profile: Record<string, unknown> | null | un
     openToTeams: profile.isOpenToTeam !== false,
     verified: true,
     lastActive: typeof profile.updatedAt === 'string' ? profile.updatedAt : (profile.updatedAt instanceof Date ? profile.updatedAt.toISOString() : new Date().toISOString()),
+    requestStatus: (profile.requestStatus as 'none' | 'pending' | 'accepted' | 'rejected' | 'withdrawn') || 'none',
+    requestDirection: (profile.requestDirection as 'sent' | 'received' | null) || null,
+    requestId: (profile.requestId as string | null) || null,
   };
 }
 

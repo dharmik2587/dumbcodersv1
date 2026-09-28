@@ -448,7 +448,7 @@ function CandidateRow({
     });
   }, [requests, b.id, me?.id]);
 
-  const reqStatus = existingReq?.request?.status ?? existingReq?.status;
+  const reqStatus = existingReq?.request?.status ?? existingReq?.status ?? b.requestStatus;
 
   return (
     <div className={cn("border border-line bg-surface transition-colors", open && "border-accent-line")}>
@@ -642,7 +642,7 @@ function RequestComposer({
                 }}
               >
                 {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                Send request
+                <span>{sending ? 'Sending...' : 'Send request'}</span>
               </Button>
             </div>
           </div>
@@ -677,7 +677,7 @@ function BuilderProfile() {
       return (toId === b.id && fromId === me?.id) || (toId === me?.id && fromId === b.id);
     });
   }, [requests, b?.id, me?.id]);
-  const reqStatus = existingReq?.request?.status ?? existingReq?.status;
+  const reqStatus = existingReq?.request?.status ?? existingReq?.status ?? b?.requestStatus;
 
   if (!b)
     return (

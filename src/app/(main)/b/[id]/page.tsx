@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { PublicSocialsSection } from "@/components/profile/PublicSocialsSection";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Check, ChevronDown, Send, Sparkles, UserPlus } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Loader2, Send, Sparkles, UserPlus } from "lucide-react";
 import { byIdMap, useActiveTeam, useMe, useApiStore } from "@/client/store/apiStore";
 import { ROLE_LABEL, ROLES, type RoleKey } from "@/client/types";
 import { CLUSTER_NAME, CLUSTER_ORDER } from "@/client/data/seed";
@@ -423,7 +423,7 @@ function CandidateRow({
     });
   }, [requests, b.id, me?.id]);
 
-  const reqStatus = existingReq?.request?.status ?? existingReq?.status;
+  const reqStatus = existingReq?.request?.status ?? existingReq?.status ?? b.requestStatus;
 
   return (
     <div className={cn("border border-line bg-surface transition-colors", open && "border-accent-line")}>
@@ -545,6 +545,7 @@ function RequestComposer({
 }) {
   const [message, setMessage] = useState("");
   const [role, setRole] = useState<RoleKey>("ml");
+  const [sending, setSending] = useState(false);
   const team = useActiveTeam();
   const me = useMe();
   const sendRequest = useApiStore((s) => s.sendRequest);
@@ -591,11 +592,12 @@ function RequestComposer({
               from {me.name} · {team.name}
             </span>
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
+              <Button variant="ghost" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
               <Button
                 size="sm"
-                disabled={message.trim().length < 12}
+                disabled={message.trim().length < 12 || sending}
                 onClick={async () => {
+                  setSending(true);
                   try {
                     await sendRequest({
                       toUserId: candidate.builder.id,
@@ -604,12 +606,17 @@ function RequestComposer({
                       message: message.trim(),
                       roleOffered: role,
                     });
-                  } catch {}
-                  setMessage("");
-                  onClose();
+                    setMessage("");
+                    onClose();
+                  } catch {
+                    // error toast handled by store
+                  } finally {
+                    setSending(false);
+                  }
                 }}
               >
-                <Send size={12} /> Send request
+                {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                <span>{sending ? 'Sending...' : 'Send request'}</span>
               </Button>
             </div>
           </div>
@@ -657,7 +664,7 @@ function BuilderProfile() {
       return (toId === b.id && fromId === me?.id) || (toId === me?.id && fromId === b.id);
     });
   }, [requests, b?.id, me?.id]);
-  const reqStatus = existingReq?.request?.status ?? existingReq?.status;
+  const reqStatus = existingReq?.request?.status ?? existingReq?.status ?? (profileQuery.data?.requestStatus ?? b?.requestStatus);
 
   if (!b)
     return (

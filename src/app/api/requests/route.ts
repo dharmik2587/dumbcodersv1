@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
 import { requireUserId } from '@/lib/auth/server';
 import { getCoreDb, hasCoreDatabase } from '@/lib/db/core';
@@ -37,26 +37,68 @@ export async function POST(request: NextRequest) {
   const recipient = await db.select({ id: profiles.id, fullName: profiles.fullName, username: profiles.username }).from(profiles).where(eq(profiles.id, parsed.data.toUserId)).limit(1);
   if (!recipient[0]) return failure('NOT_FOUND', 'Recipient not found.', 404);
 
-  // Idempotent check: if a pending request already exists, return it instead of throwing 409 error
-  const existing = await db.select().from(teamRequests).where(and(eq(teamRequests.fromUserId, userId), eq(teamRequests.toUserId, parsed.data.toUserId), eq(teamRequests.status, 'pending'))).limit(1);
+  // Idempotent check: if a pending or accepted request already exists, return it instead of creating duplicates
+  const existing = await db
+    .select()
+    .from(teamRequests)
+    .where(
+      and(
+        eq(teamRequests.fromUserId, userId),
+        eq(teamRequests.toUserId, parsed.data.toUserId),
+        or(eq(teamRequests.status, 'pending'), eq(teamRequests.status, 'accepted'))
+      )
+    )
+    .limit(1);
+
   if (existing[0]) {
     return success(existing[0], { status: 200 });
   }
 
+  // Idempotent check: if the recipient already sent a pending request to the caller, return that
+  const incomingReq = await db
+    .select()
+    .from(teamRequests)
+    .where(
+      and(
+        eq(teamRequests.fromUserId, parsed.data.toUserId),
+        eq(teamRequests.toUserId, userId),
+        eq(teamRequests.status, 'pending')
+      )
+    )
+    .limit(1);
+
+  if (incomingReq[0]) {
+    return success(incomingReq[0], { status: 200 });
+  }
+
   let created;
   try {
-    const [inserted] = await db.insert(teamRequests).values({
-      fromUserId: userId,
-      toUserId: parsed.data.toUserId,
-      teamId: parsed.data.teamId ?? null,
-      hackathonId: parsed.data.hackathonId ?? null,
-      message: parsed.data.message ?? null,
-      roleOffered: parsed.data.roleOffered ?? null,
-    }).returning();
+    const [inserted] = await db
+      .insert(teamRequests)
+      .values({
+        fromUserId: userId,
+        toUserId: parsed.data.toUserId,
+        teamId: parsed.data.teamId ?? null,
+        hackathonId: parsed.data.hackathonId ?? null,
+        message: parsed.data.message ?? null,
+        roleOffered: parsed.data.roleOffered ?? null,
+      })
+      .returning();
     created = inserted;
   } catch (err: unknown) {
-    // If concurrent insert caused unique index collision, return the existing row
-    const fallback = await db.select().from(teamRequests).where(and(eq(teamRequests.fromUserId, userId), eq(teamRequests.toUserId, parsed.data.toUserId), eq(teamRequests.status, 'pending'))).limit(1);
+    // If concurrent insert caused unique index collision (double click), return the existing row
+    const fallback = await db
+      .select()
+      .from(teamRequests)
+      .where(
+        and(
+          eq(teamRequests.fromUserId, userId),
+          eq(teamRequests.toUserId, parsed.data.toUserId),
+          or(eq(teamRequests.status, 'pending'), eq(teamRequests.status, 'accepted'))
+        )
+      )
+      .limit(1);
+
     if (fallback[0]) {
       return success(fallback[0], { status: 200 });
     }
