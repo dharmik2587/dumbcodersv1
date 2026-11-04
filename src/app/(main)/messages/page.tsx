@@ -8,6 +8,18 @@ import Link from 'next/link';
 import { Send, MessageSquare, Search, User, ArrowLeft, ShieldCheck, CheckCheck, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { useMe } from '@/client/store/apiStore';
 import { subscribeChannel } from '@/client/lib/pusher-client';
+import { supabase } from '@/client/lib/auth';
+import { toast } from 'sonner';
+
+async function getAuthHeader(): Promise<Record<string, string>> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` };
+    }
+  } catch {}
+  return {};
+}
 
 interface ConversationItem {
   id: string;
@@ -151,10 +163,14 @@ function MessagesContent() {
   const { data: conversations, isLoading: loadingConversations } = useQuery<ConversationItem[]>({
     queryKey: ['conversations'],
     queryFn: async () => {
-      const res = await fetch('/api/messages', { credentials: 'include' });
+      const authHeader = await getAuthHeader();
+      const res = await fetch('/api/messages', {
+        headers: { ...authHeader },
+        credentials: 'include',
+      });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error?.message ?? 'Failed to load conversations');
-      return body.data;
+      return body.data || [];
     },
     refetchOnWindowFocus: true,
   });
@@ -170,21 +186,51 @@ function MessagesContent() {
   // 2. If ?userId= was passed, start or focus that conversation
   const startMutation = useMutation({
     mutationFn: async (recipientId: string) => {
+      const authHeader = await getAuthHeader();
       const res = await fetch('/api/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeader,
+        },
         credentials: 'include',
-        body: JSON.stringify({ recipientId }),
+        body: JSON.stringify({ recipientId, toUserId: recipientId }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error?.message ?? 'Failed to open conversation');
-      return body.data as { id: string };
+      return body.data as {
+        id: string;
+        partnerId: string;
+        partnerName: string | null;
+        partnerUsername: string;
+        partnerAvatar: string | null;
+      };
     },
     onSuccess: (data) => {
+      // Immediately seed conversations list in cache so activeConvo is instantly populated
+      queryClient.setQueryData<ConversationItem[]>(['conversations'], (old = []) => {
+        if (old.some((c) => c.id === data.id)) return old;
+        const newConvo: ConversationItem = {
+          id: data.id,
+          partnerId: data.partnerId,
+          partnerName: data.partnerName,
+          partnerUsername: data.partnerUsername,
+          partnerAvatar: data.partnerAvatar,
+          lastMessage: null,
+          lastMessageAt: new Date().toISOString(),
+          unreadCount: 0,
+        };
+        return [newConvo, ...old];
+      });
+
       void queryClient.invalidateQueries({ queryKey: ['conversations'] });
       setActiveConversationId(data.id);
       router.replace('/messages');
       setTimeout(() => composerInputRef.current?.focus(), 100);
+    },
+    onError: (err: unknown) => {
+      console.error('Failed to start conversation:', err);
+      toast.error(err instanceof Error ? err.message : 'Could not start conversation');
     },
   });
 
@@ -192,7 +238,7 @@ function MessagesContent() {
     if (initialUserId && me?.id && initialUserId !== me.id) {
       startMutation.mutate(initialUserId);
     }
-  }, [initialUserId, me?.id, startMutation]);
+  }, [initialUserId, me?.id]);
 
   // Default to initialConversationId or first conversation if none selected
   useEffect(() => {
@@ -210,7 +256,11 @@ function MessagesContent() {
     queryKey: ['messages', activeConversationId],
     queryFn: async () => {
       if (!activeConversationId) return [];
-      const res = await fetch(`/api/messages/${activeConversationId}`, { credentials: 'include' });
+      const authHeader = await getAuthHeader();
+      const res = await fetch(`/api/messages/${activeConversationId}`, {
+        headers: { ...authHeader },
+        credentials: 'include',
+      });
       const body = await res.json().catch(() => null);
       if (!res.ok) throw new Error(body?.error?.message ?? 'Failed to load messages');
       return (body.data as MessageItem[]).map((m) => ({ ...m, status: 'sent' }));
@@ -230,9 +280,13 @@ function MessagesContent() {
       text: string;
       clientMessageId: string;
     }) => {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/messages/${convoId}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeader,
+        },
         credentials: 'include',
         body: JSON.stringify({ content: text, clientMessageId }),
       });
@@ -502,7 +556,7 @@ function MessagesContent() {
 
         {/* Chat Thread */}
         <div className={`md:col-span-8 flex flex-col bg-surface ${!activeConversationId ? 'hidden md:flex' : 'flex'}`}>
-          {activeConvo ? (
+          {activeConvo || activeConversationId ? (
             <>
               {/* Chat Thread Header */}
               <div className="flex items-center justify-between border-b border-line px-5 py-3.5 bg-raised/40">
@@ -514,10 +568,10 @@ function MessagesContent() {
                     <ArrowLeft size={16} />
                   </button>
                   <div className="relative h-9 w-9 rounded-full border border-line overflow-hidden bg-raised flex items-center justify-center">
-                    {activeConvo.partnerAvatar ? (
+                    {activeConvo?.partnerAvatar ? (
                       <Image
                         src={activeConvo.partnerAvatar}
-                        alt={activeConvo.partnerUsername}
+                        alt={activeConvo.partnerUsername || 'Avatar'}
                         width={36}
                         height={36}
                         className="h-full w-full object-cover"
@@ -528,18 +582,22 @@ function MessagesContent() {
                   </div>
                   <div>
                     <h2 className="text-sm font-semibold text-foreground">
-                      {activeConvo.partnerName || activeConvo.partnerUsername}
+                      {activeConvo?.partnerName || activeConvo?.partnerUsername || 'Direct Message'}
                     </h2>
-                    <p className="font-mono text-[10px] text-muted">@{activeConvo.partnerUsername}</p>
+                    <p className="font-mono text-[10px] text-muted">
+                      {activeConvo?.partnerUsername ? `@${activeConvo.partnerUsername}` : 'Encrypted Chat'}
+                    </p>
                   </div>
                 </div>
 
-                <Link
-                  href={`/b/${activeConvo.partnerId}`}
-                  className="rounded-xl border border-line bg-raised/60 px-3 py-1.5 font-mono text-xs text-subtle hover:text-accent hover:border-accent transition-colors"
-                >
-                  View Profile
-                </Link>
+                {activeConvo?.partnerId && (
+                  <Link
+                    href={`/b/${activeConvo.partnerId}`}
+                    className="rounded-xl border border-line bg-raised/60 px-3 py-1.5 font-mono text-xs text-subtle hover:text-accent hover:border-accent transition-colors"
+                  >
+                    View Profile
+                  </Link>
+                )}
               </div>
 
               {/* Messages viewport */}
@@ -550,7 +608,9 @@ function MessagesContent() {
                   <div className="h-full flex flex-col items-center justify-center text-center text-muted p-6">
                     <MessageSquare size={36} className="text-accent mb-3" />
                     <p className="text-sm font-semibold text-foreground">You are now connected.</p>
-                    <p className="text-xs text-subtle mt-1">Start the conversation with {activeConvo.partnerName || activeConvo.partnerUsername}.</p>
+                    <p className="text-xs text-subtle mt-1">
+                      Start the conversation with {activeConvo?.partnerName || activeConvo?.partnerUsername || 'this builder'}.
+                    </p>
                     <p className="font-mono text-[10px] text-muted mt-2">End-to-end encrypted at rest via pgcrypto.</p>
                   </div>
                 )}

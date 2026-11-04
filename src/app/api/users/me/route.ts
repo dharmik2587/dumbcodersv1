@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { getOptionalUser, requireUser } from '@/lib/auth/server';
 import { hasCoreDatabase } from '@/lib/db/core';
-import { getProfileById, updateProfile } from '@/lib/db/queries/profiles';
+import { getFullProfileById, updateProfile } from '@/lib/db/queries/profiles';
 import { ensureStudentProfile } from '@/lib/profile/student';
 import { failure, success } from '@/lib/http';
 import { profileUpdateSchema } from '@/lib/validations/profile';
@@ -15,7 +15,8 @@ export async function GET() {
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
 
   try {
-    const profile = await ensureStudentProfile(user);
+    await ensureStudentProfile(user);
+    const profile = await getFullProfileById(user.id);
     return success(profile);
   } catch (error: unknown) {
     console.error('GET /api/users/me failed', error);
@@ -56,4 +57,3 @@ export async function PATCH(request: NextRequest) {
     return failure('DATABASE_ERROR', `Could not update your profile: ${msg}`, 500);
   }
 }
-

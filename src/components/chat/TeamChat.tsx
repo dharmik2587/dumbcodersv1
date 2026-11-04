@@ -4,6 +4,17 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Send, MessageSquare, AlertCircle } from 'lucide-react';
 import { subscribeChannel } from '@/client/lib/pusher-client';
+import { supabase } from '@/client/lib/auth';
+
+async function getAuthHeader(): Promise<Record<string, string>> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      return { Authorization: `Bearer ${session.access_token}` };
+    }
+  } catch {}
+  return {};
+}
 
 type MessageItem = {
   id: string;
@@ -56,7 +67,9 @@ export function TeamChat({ teamId, currentUserId }: { teamId: string; currentUse
   const { data: messages, isLoading, error } = useQuery<MessageItem[]>({
     queryKey: ['team-messages', teamId],
     queryFn: async () => {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/teams/${teamId}/messages`, {
+        headers: { ...authHeader },
         credentials: 'include',
       });
       if (!res.ok) {
@@ -102,9 +115,13 @@ export function TeamChat({ teamId, currentUserId }: { teamId: string; currentUse
   // Optimistic sending mutation
   const sendMutation = useMutation({
     mutationFn: async (text: string) => {
+      const authHeader = await getAuthHeader();
       const res = await fetch(`/api/teams/${teamId}/messages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeader,
+        },
         credentials: 'include',
         body: JSON.stringify({ content: text }),
       });

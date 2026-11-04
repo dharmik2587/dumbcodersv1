@@ -1,3 +1,4 @@
+import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { hasSupabaseConfig } from '@/lib/env';
 
@@ -5,6 +6,23 @@ export async function getOptionalUser() {
   if (!hasSupabaseConfig()) return null;
   try {
     const supabase = await createClient();
+
+    // 1. Check for Authorization Bearer token in request headers
+    try {
+      const headerList = await headers();
+      const authHeader = headerList.get('authorization');
+      if (authHeader?.startsWith('Bearer ')) {
+        const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+        if (token) {
+          const { data: { user }, error } = await supabase.auth.getUser(token);
+          if (!error && user) return user;
+        }
+      }
+    } catch {
+      // headers() might not be available in non-request contexts
+    }
+
+    // 2. Check for cookie-based session
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -26,6 +44,23 @@ export async function requireUser() {
   }
 
   const supabase = await createClient();
+
+  // 1. Check for Authorization Bearer token in request headers
+  try {
+    const headerList = await headers();
+    const authHeader = headerList.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+      if (token) {
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (!error && user) return user;
+      }
+    }
+  } catch {
+    // headers() might not be available in non-request contexts
+  }
+
+  // 2. Check for cookie-based session
   const {
     data: { user },
     error,

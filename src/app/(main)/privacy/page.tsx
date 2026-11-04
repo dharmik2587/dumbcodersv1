@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
+import { constructMetadata } from "@/lib/seo/metadata";
 import { Panel, Reveal } from "@/components/ui";
+
+export const metadata: Metadata = constructMetadata({
+  title: "Privacy Policy",
+  description: "Read how HackMate protects user privacy, student builder profiles, and encrypted communications.",
+  path: "/privacy",
+});
 
 export default function PrivacyPage() {
   return (

@@ -1,61 +1,107 @@
-# HackMate
+# HackMate · Intelligent Hackathon Teammate Matching & Workspace
 
-HackMate is the premier hackathon teammate matching and collaboration workspace platform, designed for college and developer hackathon teams.
+[![Next.js](https://img.shields.io/badge/Next.js-15.2.8-black?style=flat&logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8.2-blue?style=flat&logo=typescript)](https://www.typescriptlang.org/)
+[![Drizzle ORM](https://img.shields.io/badge/Drizzle_ORM-0.40.0-green?style=flat&logo=drizzle)](https://orm.drizzle.team/)
+[![Neon Database](https://img.shields.io/badge/Neon-PostgreSQL-00e599?style=flat&logo=postgresql)](https://neon.tech/)
+[![Supabase Auth](https://img.shields.io/badge/Supabase-Auth-3ecf8e?style=flat&logo=supabase)](https://supabase.com/)
+[![Render](https://img.shields.io/badge/Deploy-Render-46E3B7?style=flat&logo=render)](https://render.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Production Architecture
-
-- **Web Framework**: Next.js 15 (App Router, Server Components & Route Handlers)
-- **Authentication**: Supabase Auth (SSR Cookie Session Management, JWT verification, Email Confirmation & Password Recovery, OAuth with GitHub/Google). Strictly no Clerk.
-- **Database**: Single Neon PostgreSQL database (`@neondatabase/serverless`) managed with Drizzle ORM.
-- **Security & Cryptography**:
-  - Row Level Security (RLS) is defined in schema migrations, but currently bypassed as the app connects directly via `CORE_DATABASE_URL` (as owner). The Next.js API route handler layer is the enforced security boundary.
-  - Chat & direct messages encrypted at rest using PostgreSQL `pgcrypto` (`safe_encrypt_text` / `safe_decrypt_text`).
-  - Strict input validation via Zod on all route handlers.
-  - Zero literal secrets in codebase; timing-safe HMAC authentication for ingestion pipelines.
-- **Rate Limiting**: Unified Upstash Redis sliding-window limiter with graceful in-memory fallback.
-- **State & Real-time**:
-  - TanStack React Query (client cache, optimistic UI updates with rollback).
-  - Next.js Native Fetch for server-state caching and Server Components.
-  - Zustand (global builder & session store, seed data management).
-  - Pusher Channels (real-time chat, direct messaging, and presence indicators).
-- **Styling**: Tailwind CSS with custom cyber-terminal design tokens, Google Fonts typography, Framer Motion page transitions, and accessible UI primitives.
+> **HackMate** is the premier platform connecting ambitious student developers, designers, and AI creators with complementary skills to build winning teams for collegiate hackathons across Devfolio, Unstop, and campus events.
 
 ---
 
-## Getting Started
+## ✨ Key Features
+
+### 1. Intelligent Teammate Matchmaking
+- **Skill-Complement Analysis**: Calculates coverage across 5 core clusters (Frontend, Backend, AI/ML, Mobile, UI/UX) to ensure no team forms with duplicate roles or missing critical functions.
+- **Commitment Window Overlap**: Matches builders based on free hours per week and event schedule alignment.
+- **Intent Alignment**: Filters candidates by specific hackathon track interests and project aspirations.
+
+### 2. Multi-Provider Hackathon Aggregator
+- **Automated Sync**: Ingestion pipeline syncing verified listings from **Devfolio**, **Unstop**, and **Hack2Skill**.
+- **Deduplication Engine**: Deterministic `canonicalKey` generation merging duplicates across platforms.
+- **Cycle Countdowns & Bookmarks**: Real-time registration deadlines, prize pool tracking, and direct registration links.
+
+### 3. Verified Builder Profiles
+- **LeetCode Integration**: Verifies total solved problems, acceptance rates, and contest rankings via real-time GraphQL verification.
+- **GitHub Sync**: Fetches active repositories, language distribution, and commit frequency.
+- **Dynamic Builder Cards**: Public profile shareables (`/b/[id]`) with radar competency charts and availability badges.
+
+### 4. End-to-End Secure Collaboration
+- **Encrypted Messaging**: Direct 1:1 chats and team room messaging encrypted at rest using PostgreSQL `pgcrypto` (`safe_encrypt_text` / `safe_decrypt_text`).
+- **Real-Time Synchronization**: Instant notifications and live updates powered by Pusher Channels.
+- **Team Roster Workspace**: Role assignment, open vacancy announcements, and team gap analytics.
+
+### 5. Production SEO Engine
+- **Server-Rendered Metadata**: Dynamic OpenGraph, Twitter cards, and canonical links for every hackathon and builder profile.
+- **Automated XML Sitemap**: Dynamically generated `/sitemap.xml` listing static pages, published hackathons, and builder profiles with 1-hour ISR revalidation.
+- **Hardened Crawl Rules**: Comprehensive `/robots.txt` allowing public indexation while disallowing private workspace, auth, and API paths.
+- **Schema.org Structured Data**:
+  - `Organization` & `WebSite` with `SearchAction` search bar integration.
+  - `Event` JSON-LD schema for hackathons (attendance mode, dates, organizers, and free offers).
+  - `BreadcrumbList` breadcrumbs for rich Google search snippets.
+
+---
+
+## 🛠️ Architecture & Tech Stack
+
+| Layer | Technologies |
+|---|---|
+| **Framework** | Next.js 15 (App Router, React 19, Server Components & Route Handlers) |
+| **Authentication** | Supabase Auth (`@supabase/ssr` with Cookie session tokens & Bearer headers) |
+| **Database** | Neon Serverless PostgreSQL with Drizzle ORM |
+| **Cryptography** | PostgreSQL `pgcrypto` (256-bit symmetric encryption for messages at rest) |
+| **State & Cache** | TanStack React Query v5, Zustand, Next.js Server Cache |
+| **Realtime** | Pusher Channels (`pusher` & `pusher-js`) |
+| **Data Ingestion** | Background ingestion scripts with timing-safe HMAC authentication |
+| **Styling & UI** | Custom cyber-terminal design tokens, Lucide Icons, Chart.js, Framer Motion |
+| **Deployment** | Render (Web Service + Scheduled Sync Cron) |
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
+- **Node.js** >= 20.0.0
+- **pnpm** >= 10.0.0
+- A Neon PostgreSQL database instance
+- A Supabase project for user authentication
+- A 64-character hex encryption key
 
-- Node.js 20+
-- pnpm 9+ or 10+
-- Neon PostgreSQL connection string (`DATABASE_URL` / `CORE_DATABASE_URL`)
-- Supabase project (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
-- `MESSAGE_ENCRYPTION_KEY` (strict requirement: exactly 64-character hex string for 32 bytes)
-
-### Environment Configuration
-
-Create `.env.local` based on `.env.example`:
+### Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/dharmik2587/dumbcodersv1.git
+cd dumbcodersv1
+
+# Install dependencies using pnpm
+pnpm install
+
+# Copy environment template
 cp .env.example .env.local
 ```
 
-Essential variables:
+### Environment Variables (`.env.local`)
+
 ```env
+# Application Base URL
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
 # Database
 DATABASE_URL=postgresql://user:password@ep-xyz.neon.tech/neondb?sslmode=require
 CORE_DATABASE_URL=postgresql://user:password@ep-xyz.neon.tech/neondb?sslmode=require
 
 # Supabase Auth
 NEXT_PUBLIC_SUPABASE_URL=https://xyz.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOi...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...
 
-# Encryption Key (REQUIRED: 64-character hex string for chat & messages at rest)
+# Database Encryption Key (REQUIRED: exactly 64-character hex string)
 MESSAGE_ENCRYPTION_KEY=1e53b1c429a3b7396b64160630d284cb09c746c9439dee3de634650e1300973a
 
-# OpenAI API Key (Required for AI Roadmap generation feature)
-OPENAI_API_KEY=sk-proj-...
 # Pusher Channels
 NEXT_PUBLIC_PUSHER_KEY=your-pusher-key
 NEXT_PUBLIC_PUSHER_CLUSTER=ap2
@@ -63,70 +109,47 @@ PUSHER_APP_ID=your-app-id
 PUSHER_KEY=your-pusher-key
 PUSHER_SECRET=your-pusher-secret
 
-# Upstash Redis (Optional for production distributed rate limiting)
-UPSTASH_REDIS_REST_URL=https://...
-UPSTASH_REDIS_REST_TOKEN=...
+# AI Roadmap Generation (Optional)
+OPENAI_API_KEY=sk-proj-...
 ```
 
-### Installation & Development
+### Database Setup & Migrations
 
 ```bash
-pnpm install
-pnpm dev
-```
-
-The application will be accessible at `http://localhost:3000`.
-
----
-
-## Database Management
-
-Migrations are defined in `drizzle/` and executed using Drizzle ORM:
-
-```bash
-# Generate migrations
-pnpm db:generate
-
-# Apply migrations to Neon database
+# Push schema or run migrations
 pnpm db:migrate
 
 # Seed development data
 pnpm db:seed
 ```
 
+### Running Locally
+
+```bash
+# Start development server
+pnpm dev
+
+# Typecheck and production build
+pnpm typecheck
+pnpm build
+```
+
 ---
 
-## Key Features
+## ☁️ Deployment on Render
 
-1. **Intelligent Teammate Matching**:
-   - Complementary skill-gap matching across taxonomy clusters.
-   - Verified GitHub and LeetCode activity integration.
-   - Structured collaboration requests with role and event attribution.
+The repository includes a ready-to-use [`render.yaml`](./render.yaml) configuration:
 
-2. **Team Workspace**:
-   - Live roster management and vacancy slots.
-   - Canonical role coverage analysis (`computeTeamGaps`).
-   - Encrypted team chat powered by `pgcrypto` and Pusher Channels.
+1. **Web Service**:
+   - Build Command: `corepack enable && pnpm install --frozen-lockfile && pnpm build`
+   - Start Command: `pnpm start`
+   - Health Check: `/api/health`
+2. **Cron Job**:
+   - Schedule: `0 */6 * * *` (every 6 hours)
+   - Command: `npx tsx scripts/sync-all-hackathons.ts`
 
-3. **Direct 1:1 Messaging**:
-   - Secure encrypted conversations between builders (`/messages`).
-   - Real-time message synchronization with read receipts.
+---
 
-4. **Hackathon Aggregator (Multi-Provider)**:
-   - Unified ingestion pipeline syncing hackathons from Unstop, Devfolio, and Hack2Skill via `npx tsx scripts/sync-all-hackathons.ts`.
-   - Deterministic canonicalization and deduplication across providers.
-   - Bookmark, interest tracking, and calendar deadline countdowns.
+## 📄 License
 
-5. **API Observability & Hardening**:
-   - Centralized `withApiHandler` pipeline logging operations, errors, and performance.
-   - Secure error mapping (does not leak Postgres traces to client).
-   - Rate limiting and standard HTTP `X-Request-ID` tracing.
-
-6. **Competitive Leaderboard**:
-   - Composite score derived from GitHub repos, commits, LeetCode solved problems, contest ratings, and hackathon results.
-   - Global, college-level, and batch filtering.
-
-7. **AI-Powered Project Roadmaps**:
-   - Dual-path state management supporting both real database state and local seed data.
-   - Progress-aware roadmap generation using OpenAI (`gpt-4o-mini`).
-   - Zod validation for robust and safe JSON ingestion of generated checklists.
+This project is licensed under the [MIT License](./LICENSE). Built by students, for students.

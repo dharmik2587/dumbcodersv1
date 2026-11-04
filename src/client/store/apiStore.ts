@@ -59,11 +59,20 @@ export function mapProfileToBuilder(profile: Record<string, unknown> | null | un
 
   const collegeObj = profile.college as { shortName?: string; name?: string } | string | undefined;
   const collegeStr = typeof collegeObj === 'object' && collegeObj !== null
-    ? (collegeObj.shortName || collegeObj.name || 'Engineering College')
-    : (typeof collegeObj === 'string' ? collegeObj : 'Engineering College');
+    ? (collegeObj.shortName || collegeObj.name || (profile.collegeName as string) || 'Engineering College')
+    : (typeof collegeObj === 'string' && collegeObj ? collegeObj : ((profile.collegeName as string) || 'Engineering College'));
 
+  const currentYear = new Date().getFullYear();
   const gradYear = typeof profile.graduationYear === 'number' ? profile.graduationYear : undefined;
-  const yearNum = gradYear ? (gradYear - 2026 + 1) : 3;
+  let yearNum = 3;
+  if (gradYear) {
+    if (gradYear >= 1 && gradYear <= 5) {
+      yearNum = gradYear;
+    } else {
+      const calculated = 4 - (gradYear - currentYear);
+      yearNum = Math.max(1, Math.min(5, calculated));
+    }
+  }
 
   const validRoles: RoleKey[] = ['frontend', 'backend', 'ml', 'design', 'product', 'mobile', 'devops'];
   const prefRole = typeof profile.rolePreference === 'string' ? profile.rolePreference.toLowerCase() : 'frontend';
@@ -674,7 +683,7 @@ const DEFAULT_BUILDER: Builder = {
   handle: 'builder',
   avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80',
   college: 'IIT Bombay',
-  year: 2026,
+  year: 3,
   initials: 'DB',
   branch: 'Computer Science',
   city: 'Mumbai',

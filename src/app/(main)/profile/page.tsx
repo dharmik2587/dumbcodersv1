@@ -54,9 +54,19 @@ export default function Profile() {
       await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
       await loadUser();
       setDirty(false);
+      pushToast({
+        label: 'Profile saved',
+        body: 'Your changes have been saved to your profile.',
+        tone: 'good',
+      });
     },
     onError: (err: unknown) => {
       console.error("Profile update error:", err);
+      pushToast({
+        label: 'Save failed',
+        body: err instanceof Error ? err.message : 'Could not save profile changes.',
+        tone: 'bad',
+      });
     },
   });
 
@@ -70,11 +80,17 @@ export default function Profile() {
       .filter((s) => s.level > 0)
       .map((s) => s.label);
 
+    const currentYear = new Date().getFullYear();
+    const gradYear = me.year
+      ? (me.year >= 1980 && me.year <= 2100 ? me.year : currentYear + (4 - me.year))
+      : undefined;
+
     await profileMutation.mutateAsync({
       fullName: me.name,
+      college: me.college || undefined,
       bio: me.bio || undefined,
       branch: me.branch || undefined,
-      graduationYear: me.year ? 2026 + (me.year - 1) : undefined,
+      graduationYear: gradYear,
       rolePreference: me.role,
       skills: selectedSkills,
       isOpenToTeam: me.openToTeams,

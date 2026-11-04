@@ -18,6 +18,8 @@ const optionalUrl = z
 export const profileUpdateSchema = z.object({
   fullName: optionalString(100),
   bio: optionalString(500),
+  college: optionalString(200),
+  collegeName: optionalString(200),
   collegeId: z
     .union([z.string().trim(), z.literal(''), z.null()])
     .transform((val) => {
@@ -29,10 +31,16 @@ export const profileUpdateSchema = z.object({
     .optional(),
   branch: optionalString(100),
   graduationYear: z
-    .preprocess(
-      (val) => (val === '' || val === null || val === undefined || (typeof val === 'number' && isNaN(val)) ? null : val),
-      z.union([z.number().int().min(1980).max(2100), z.null()])
-    )
+    .preprocess((val) => {
+      if (val === '' || val === null || val === undefined) return null;
+      const num = Number(val);
+      if (isNaN(num)) return null;
+      // If user passed college year 1-5, map to graduation year
+      if (num >= 1 && num <= 5) {
+        return new Date().getFullYear() + (4 - num);
+      }
+      return num;
+    }, z.union([z.number().int().min(1980).max(2100), z.null()]))
     .nullable()
     .optional(),
   skills: z.array(z.string().trim().min(1).max(50)).max(30).optional().default([]),
@@ -44,6 +52,5 @@ export const profileUpdateSchema = z.object({
   onboardingDone: z.boolean().optional(),
   isOpenToTeam: z.boolean().optional(),
 });
-
 
 export type ProfileUpdate = z.infer<typeof profileUpdateSchema>;

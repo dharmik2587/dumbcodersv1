@@ -56,16 +56,27 @@ export class UnstopProvider implements HackathonProvider {
     const results: NormalizedHackathon[] = [];
     const url = `${UNSTOP_API}?opportunity=hackathons&per_page=30&page=1&oppstatus=open`;
 
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-        Accept: 'application/json',
-      },
-      signal: AbortSignal.timeout(15000),
-    });
+    let res: Response | null = null;
+    let lastError: unknown = null;
 
-    if (!res.ok) {
-      throw new Error(`Unstop API failed with status ${res.status}`);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        res = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+            Accept: 'application/json',
+          },
+          signal: AbortSignal.timeout(25000),
+        });
+        if (res.ok) break;
+      } catch (err) {
+        lastError = err;
+        if (attempt === 2) throw err;
+      }
+    }
+
+    if (!res || !res.ok) {
+      throw (lastError instanceof Error ? lastError : new Error(`Unstop API failed with status ${res?.status ?? 'unknown'}`));
     }
 
     const json = await res.json();

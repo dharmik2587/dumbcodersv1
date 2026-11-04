@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { requireUserId } from '@/lib/auth/server';
+import { requireUser } from '@/lib/auth/server';
+import { ensureStudentProfile } from '@/lib/profile/student';
 import { enforceRateLimit } from '@/lib/ratelimit';
 import { failure, success } from '@/lib/http';
 import { createOutboxEvent, listConversationMessages, sendDirectMessage } from '@/lib/db/queries/messages';
@@ -8,23 +9,24 @@ import { triggerPusherEvent } from '@/lib/pusher';
 
 const sendMessageSchema = z.object({
   content: z.string().trim().min(1, 'Message cannot be empty').max(2000, 'Message cannot exceed 2000 characters'),
-  clientMessageId: z.string().uuid('Invalid client message ID').optional(),
+  clientMessageId: z.string().optional(),
 });
 
 export async function GET(
   _request: NextRequest,
   context: { params: Promise<{ conversationId: string }> }
 ) {
-  let userId: string;
+  let user;
   try {
-    userId = await requireUserId();
+    user = await requireUser();
+    await ensureStudentProfile(user);
   } catch {
     return failure('UNAUTHORIZED', 'Sign in to continue.', 401);
   }
 
   try {
     const { conversationId } = await context.params;
-    const messages = await listConversationMessages(conversationId, userId);
+    const messages = await listConversationMessages(conversationId, user.id);
     return success(messages);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Failed to fetch messages';
@@ -37,13 +39,15 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ conversationId: string }> }
 ) {
-  let userId: string;
+  let user;
   try {
-    userId = await requireUserId();
+    user = await requireUser();
+    await ensureStudentProfile(user);
   } catch {
     return failure('UNAUTHORIZED', 'Sign in to continue.', 401);
   }
 
+  const userId = user.id;
   const rateCheck = await enforceRateLimit(`msg:send:${userId}`, 30, 60);
   if (!rateCheck.success) {
     return rateCheck.response!;
@@ -114,4 +118,3 @@ export async function POST(
     return failure('INTERNAL_ERROR', msg, status);
   }
 }
-

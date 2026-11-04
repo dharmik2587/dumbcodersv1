@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
+import { constructMetadata } from "@/lib/seo/metadata";
 import { Panel, Reveal } from "@/components/ui";
+
+export const metadata: Metadata = constructMetadata({
+  title: "Terms of Service",
+  description: "Review the HackMate terms of service for students, hackathon organizers, and developers.",
+  path: "/terms",
+});
 
 export default function TermsPage() {
   return (

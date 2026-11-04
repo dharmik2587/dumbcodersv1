@@ -1,4 +1,13 @@
+import type { Metadata } from "next";
+import { constructMetadata } from "@/lib/seo/metadata";
 import { Panel, Reveal } from "@/components/ui";
+
+export const metadata: Metadata = constructMetadata({
+  title: "About Us · Built by Students, for Hackathon Builders",
+  description:
+    "HackMate connects student developers, UI designers, and AI creators across colleges to find complementary hackathon teammates and build winning projects.",
+  path: "/about",
+});
 
 export default function AboutPage() {
   return (
