@@ -15,7 +15,7 @@ services:
     name: sync-hackathons-cron
     env: node
     schedule: "0 */6 * * *"
-    startCommand: 'curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$NEXT_PUBLIC_APP_URL/api/cron/sync-hackathons"'
+    startCommand: 'curl -fsS -H "Authorization: Bearer $CRON_SECRET" "$NEXT_PUBLIC_APP_URL/api/cron/ingest"'
     envVars:
       - key: CRON_SECRET
         sync: false

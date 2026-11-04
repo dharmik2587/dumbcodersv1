@@ -50,7 +50,7 @@ export class DevfolioProvider implements HackathonProvider {
 
     for (const filter of filters) {
       try {
-        const url = `${DEVFOLIO_API}?filter=${filter}&page=1&limit=30`;
+        const url = `${DEVFOLIO_API}?filter=${filter}&page=1&limit=100`;
         const res = await fetch(url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',

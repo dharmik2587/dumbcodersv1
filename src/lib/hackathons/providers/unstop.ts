@@ -54,7 +54,7 @@ export class UnstopProvider implements HackathonProvider {
 
   async fetchHackathons(): Promise<NormalizedHackathon[]> {
     const results: NormalizedHackathon[] = [];
-    const url = `${UNSTOP_API}?opportunity=hackathons&per_page=30&page=1&oppstatus=open`;
+    const url = `${UNSTOP_API}?opportunity=hackathons&per_page=100&page=1&oppstatus=open`;
 
     let res: Response | null = null;
     let lastError: unknown = null;

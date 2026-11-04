@@ -16,9 +16,8 @@ function authenticateCron(request: NextRequest): boolean {
 
   const authHeader = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
   const headerSecret = request.headers.get('x-cron-secret')?.trim();
-  const urlParam = request.nextUrl.searchParams.get('key')?.trim();
-
-  const candidate = authHeader || headerSecret || urlParam;
+  // Secrets are accepted only via headers. Query-string secrets leak into logs and proxies.
+  const candidate = authHeader || headerSecret;
   if (!candidate) return false;
 
   const bufA = Buffer.from(candidate);

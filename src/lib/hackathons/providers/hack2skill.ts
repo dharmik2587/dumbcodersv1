@@ -48,7 +48,7 @@ export class Hack2SkillProvider implements HackathonProvider {
   }
 
   async fetchHackathons(): Promise<NormalizedHackathon[]> {
-    const feedUrl = process.env.HACK2SKILL_FEED_URL || `${HACK2SKILL_PUBLIC_API}?records=30&page=1`;
+    const feedUrl = process.env.HACK2SKILL_FEED_URL || `${HACK2SKILL_PUBLIC_API}?records=100&page=1`;
 
     try {
       const res = await fetch(feedUrl, {
