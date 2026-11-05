@@ -83,9 +83,24 @@ function Requests() {
   const byId = useMemo(() => byIdMap(builders), [builders]);
 
   useEffect(() => {
-    Promise.all([loadRequests(), loadTeams(), loadBuilders()]).then(() =>
+    Promise.all([loadRequests(), loadTeams(), loadBuilders()]).finally(() =>
       setLoading(false)
     );
+
+    // Poll every 6 seconds so requests automatically appear without manual refresh
+    const interval = setInterval(() => {
+      loadRequests();
+    }, 6000);
+
+    const onFocus = () => {
+      loadRequests();
+    };
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
   }, [loadRequests, loadTeams, loadBuilders]);
 
   if (loading) {
@@ -186,12 +201,14 @@ function RequestCard({
 
   // Look up the "other" person
   const otherUserId = inbox ? fromUserId : toUserId;
-  const person = (otherUserId ? byId.get(otherUserId) : null) ?? (fromProfile ? {
-    id: fromProfile.id,
-    name: fromProfile.fullName ?? fromProfile.username ?? "Unknown",
-    handle: fromProfile.username ?? "",
-    avatarUrl: fromProfile.avatarUrl ?? undefined,
-    initials: (fromProfile.fullName ?? fromProfile.username ?? "?").slice(0, 2).toUpperCase(),
+  const toProfile = (r as any).to ?? null;
+  const relevantProfile = inbox ? fromProfile : toProfile;
+  const person = (otherUserId ? byId.get(otherUserId) : null) ?? (relevantProfile ? {
+    id: relevantProfile.id,
+    name: relevantProfile.fullName ?? relevantProfile.username ?? "Builder",
+    handle: relevantProfile.username ?? "",
+    avatarUrl: relevantProfile.avatarUrl ?? undefined,
+    initials: (relevantProfile.fullName ?? relevantProfile.username ?? "?").slice(0, 2).toUpperCase(),
     skills: [],
     repos: [],
   } : null);
@@ -336,26 +353,36 @@ function RequestCard({
         </Chip>
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-4">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
         {status === "accepted" ? (
           <div className="flex w-full items-center justify-between">
             <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-mint">
-              <Check size={11} /> added to roster
+              <Check size={11} /> connected
             </span>
-            {teamId ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setChatOpen(true);
-                  loadChat();
-                }}
-                className="flex items-center gap-1.5"
-              >
-                <MessageSquare size={12} className="text-accent" />
-                Chat
-              </Button>
-            ) : null}
+            <div className="flex items-center gap-2">
+              {teamId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setChatOpen(true);
+                    loadChat();
+                  }}
+                  className="flex items-center gap-1.5"
+                >
+                  <MessageSquare size={12} className="text-accent" />
+                  Team Chat
+                </Button>
+              )}
+              {otherUserId && (
+                <Link href={`/messages?user=${otherUserId}`}>
+                  <Button size="sm" variant="outline" className="flex items-center gap-1.5 border-mint/40 text-mint hover:bg-mint/10">
+                    <MessageSquare size={12} />
+                    Message
+                  </Button>
+                </Link>
+              )}
+            </div>
           </div>
         ) : inbox ? (
           status === "rejected" ? (
@@ -363,36 +390,54 @@ function RequestCard({
               <X size={11} /> declined
             </span>
           ) : (
-            <>
-              <Button
-                size="sm"
-                disabled={acting}
-                onClick={() => act("accept")}
-              >
-                {acting ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                Accept
-              </Button>
+            <div className="flex w-full items-center justify-between gap-2">
+              {otherUserId ? (
+                <Link href={`/messages?user=${otherUserId}`}>
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    <MessageSquare size={12} /> Message
+                  </Button>
+                </Link>
+              ) : <div />}
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  disabled={acting}
+                  onClick={() => act("accept")}
+                >
+                  {acting ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                  Accept
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={acting}
+                  onClick={() => act("reject")}
+                >
+                  <X size={11} /> Pass
+                </Button>
+              </div>
+            </div>
+          )
+        ) : (
+          status === "pending" ? (
+            <div className="flex w-full items-center justify-between gap-2">
+              {otherUserId ? (
+                <Link href={`/messages?user=${otherUserId}`}>
+                  <Button size="sm" variant="outline" className="gap-1.5">
+                    <MessageSquare size={12} /> Message
+                  </Button>
+                </Link>
+              ) : <div />}
               <Button
                 size="sm"
                 variant="ghost"
                 disabled={acting}
-                onClick={() => act("reject")}
+                onClick={() => act("withdraw")}
               >
-                <X size={11} /> Pass
+                {acting ? <Loader2 size={12} className="animate-spin" /> : <X size={11} />}
+                Withdraw
               </Button>
-            </>
-          )
-        ) : (
-          status === "pending" ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={acting}
-              onClick={() => act("withdraw")}
-            >
-              {acting ? <Loader2 size={12} className="animate-spin" /> : <X size={11} />}
-              Withdraw
-            </Button>
+            </div>
           ) : (
             <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-fg3">
               {statusLabel}

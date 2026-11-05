@@ -1,6 +1,7 @@
 import { and, eq, or } from 'drizzle-orm';
 import { NextRequest } from 'next/server';
-import { requireUserId } from '@/lib/auth/server';
+import { requireUser } from '@/lib/auth/server';
+import { ensureStudentProfile } from '@/lib/profile/student';
 import { getCoreDb, hasCoreDatabase } from '@/lib/db/core';
 import { createNotification, createOutboxEvent } from '@/lib/db/queries/notifications';
 import { listRequests } from '@/lib/db/queries/requests';
@@ -13,29 +14,48 @@ import { triggerPusherEvent } from '@/lib/pusher';
 export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
-  let userId: string;
-  try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
+  let user;
+  try {
+    user = await requireUser();
+    await ensureStudentProfile(user);
+  } catch {
+    return failure('UNAUTHORIZED', 'Sign in to continue.', 401);
+  }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
   const direction = request.nextUrl.searchParams.get('direction');
   const safeDirection = direction === 'received' || direction === 'sent' ? direction : 'all';
-  return success(await listRequests(userId, safeDirection));
+  return success(await listRequests(user.id, safeDirection));
 }
 
 export async function POST(request: NextRequest) {
-  let userId: string;
-  try { userId = await requireUserId(); } catch { return failure('UNAUTHORIZED', 'Sign in to continue.', 401); }
+  let user;
+  try {
+    user = await requireUser();
+    await ensureStudentProfile(user);
+  } catch {
+    return failure('UNAUTHORIZED', 'Sign in to continue.', 401);
+  }
   if (!hasCoreDatabase()) return failure('NOT_CONFIGURED', 'Database is not configured.', 503);
 
+  const userId = user.id;
   const rl = await enforceRateLimit(`requests:${userId}`, 15, 60);
   if (!rl.success && rl.response) return rl.response;
 
   const parsed = createRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return failure('VALIDATION_ERROR', 'Invalid collaboration request.', 400);
-  if (parsed.data.toUserId === userId) return failure('INVALID_RECIPIENT', 'You cannot request yourself.', 400);
 
+  const rawToUser = parsed.data.toUserId.trim();
   const db = getCoreDb();
-  const recipient = await db.select({ id: profiles.id, fullName: profiles.fullName, username: profiles.username }).from(profiles).where(eq(profiles.id, parsed.data.toUserId)).limit(1);
+  const recipient = await db
+    .select({ id: profiles.id, fullName: profiles.fullName, username: profiles.username })
+    .from(profiles)
+    .where(or(eq(profiles.id, rawToUser), eq(profiles.username, rawToUser)))
+    .limit(1);
+
   if (!recipient[0]) return failure('NOT_FOUND', 'Recipient not found.', 404);
+  const targetUserId = recipient[0].id;
+
+  if (targetUserId === userId) return failure('INVALID_RECIPIENT', 'You cannot request yourself.', 400);
 
   // Idempotent check: if a pending or accepted request already exists, return it instead of creating duplicates
   const existing = await db
@@ -44,7 +64,7 @@ export async function POST(request: NextRequest) {
     .where(
       and(
         eq(teamRequests.fromUserId, userId),
-        eq(teamRequests.toUserId, parsed.data.toUserId),
+        eq(teamRequests.toUserId, targetUserId),
         or(eq(teamRequests.status, 'pending'), eq(teamRequests.status, 'accepted'))
       )
     )
@@ -60,7 +80,7 @@ export async function POST(request: NextRequest) {
     .from(teamRequests)
     .where(
       and(
-        eq(teamRequests.fromUserId, parsed.data.toUserId),
+        eq(teamRequests.fromUserId, targetUserId),
         eq(teamRequests.toUserId, userId),
         eq(teamRequests.status, 'pending')
       )
@@ -77,7 +97,7 @@ export async function POST(request: NextRequest) {
       .insert(teamRequests)
       .values({
         fromUserId: userId,
-        toUserId: parsed.data.toUserId,
+        toUserId: targetUserId,
         teamId: parsed.data.teamId ?? null,
         hackathonId: parsed.data.hackathonId ?? null,
         message: parsed.data.message ?? null,
@@ -93,7 +113,7 @@ export async function POST(request: NextRequest) {
       .where(
         and(
           eq(teamRequests.fromUserId, userId),
-          eq(teamRequests.toUserId, parsed.data.toUserId),
+          eq(teamRequests.toUserId, targetUserId),
           or(eq(teamRequests.status, 'pending'), eq(teamRequests.status, 'accepted'))
         )
       )
@@ -110,10 +130,10 @@ export async function POST(request: NextRequest) {
 
   // Notifications and outbox
   await createNotification({
-    userId: parsed.data.toUserId,
+    userId: targetUserId,
     type: 'team_request',
     title: 'New team-up request',
-    message: 'Someone wants to collaborate with you on HackMate.',
+    message: `${user.user_metadata?.full_name || user.user_metadata?.name || 'Someone'} wants to collaborate with you on HackMate.`,
     href: '/requests',
     dedupeKey: `request:${created.id}:received`,
   });
@@ -122,7 +142,7 @@ export async function POST(request: NextRequest) {
     eventType: 'team_request.created',
     aggregateType: 'team_request',
     aggregateId: created.id,
-    payload: { fromUserId: userId, toUserId: parsed.data.toUserId },
+    payload: { fromUserId: userId, toUserId: targetUserId },
   });
 
   // Direct Pusher broadcast to recipient (accelerator, non-blocking)
@@ -130,13 +150,13 @@ export async function POST(request: NextRequest) {
     action: 'created',
     requestId: created.id,
     fromUserId: userId,
-    toUserId: parsed.data.toUserId,
+    toUserId: targetUserId,
     status: created.status,
     roleOffered: created.roleOffered,
     teamId: created.teamId,
     createdAt: created.createdAt instanceof Date ? created.createdAt.toISOString() : created.createdAt,
   };
-  await triggerPusherEvent(`private-user-${parsed.data.toUserId}`, 'team-request', recipientPusherPayload);
+  await triggerPusherEvent(`private-user-${targetUserId}`, 'team-request', recipientPusherPayload);
 
   // Direct Pusher broadcast to sender as well (for multi-tab synchronization)
   await triggerPusherEvent(`private-user-${userId}`, 'team-request', {

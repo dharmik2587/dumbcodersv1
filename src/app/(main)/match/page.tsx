@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter, usePathname, useSearchParams } from "next/navigation";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Check, ChevronDown, Loader2, Send, Sparkles, UserPlus, Search, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Loader2, MessageSquare, Send, Sparkles, UserPlus, Search, X } from "lucide-react";
 import { byIdMap, useActiveTeam, useMe, useApiStore } from "@/client/store/apiStore";
 import { ROLE_LABEL, ROLES, type RoleKey } from "@/client/types";
 import { CLUSTER_NAME, CLUSTER_ORDER } from "@/client/data/seed";
@@ -527,17 +527,20 @@ function CandidateRow({
                     ))}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={`/messages?user=${b.id}`}>
+                    <Button size="sm" variant="outline" className="gap-1.5 border-line hover:border-accent hover:text-accent">
+                      <MessageSquare size={12} /> Message
+                    </Button>
+                  </Link>
                   {reqStatus === "pending" ? (
                     <Button size="sm" disabled variant="outline" className="border-accent/40 text-accent cursor-default">
                       <Check size={12} className="text-accent" /> Sent
                     </Button>
                   ) : reqStatus === "accepted" ? (
-                    <Link href={`/messages?user=${b.id}`}>
-                      <Button size="sm" variant="outline" className="border-mint/40 text-mint hover:bg-mint/10">
-                        <Check size={12} /> Connected
-                      </Button>
-                    </Link>
+                    <Button size="sm" variant="outline" className="border-mint/40 text-mint cursor-default" disabled>
+                      <Check size={12} /> Connected
+                    </Button>
                   ) : reqStatus === "rejected" || reqStatus === "withdrawn" ? (
                     <Button size="sm" onClick={onCompose}>
                       <UserPlus size={12} /> Send again
@@ -579,20 +582,20 @@ function RequestComposer({
 
   return (
     <Modal open={!!candidate} onClose={onClose} title="collaboration request">
-      {candidate && team && (
+      {candidate && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 border border-line bg-raised px-3.5 py-3">
             <Avatar b={candidate.builder} size={32} link={false} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13.5px] text-fg">{candidate.builder.name}</div>
               <div className="font-mono text-[10px] text-fg3">
-                complement {candidate.total}% · {hackathonName}
+                {team ? `complement ${candidate.total}% · ${hackathonName}` : `Collaborate with ${candidate.builder.name}`}
               </div>
             </div>
             <Sparkles size={14} className="text-mint" />
           </div>
 
-          <Field label="Requested role">
+          <Field label="Collaboration role">
             <Select value={role} onChange={(e) => setRole(e.target.value as RoleKey)}>
               {ROLES.map((r) => (
                 <option key={r} value={r}>{ROLE_LABEL[r]}</option>
@@ -602,33 +605,33 @@ function RequestComposer({
 
           <Field
             label="Message"
-            hint={`${message.length} / 240 — say what you need them to build, not just that you'd like them.`}
+            hint={`${message.length} / 240 — say what you want to build together.`}
           >
             <Textarea
               rows={4}
               maxLength={240}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder={`We're building for ${hackathonName} and ${team.name} is missing ${ROLE_LABEL[role].toLowerCase()}. ${candidate.fillsGaps[0] ? `You'd close our ${candidate.fillsGaps[0]} gap.` : ""}`}
+              placeholder={team ? `We're building for ${hackathonName} and ${team.name} is looking for ${ROLE_LABEL[role].toLowerCase()}.` : `Hey, would love to team up for upcoming hackathons!`}
             />
           </Field>
 
           <div className="flex items-center justify-between border-t border-line pt-4">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg3">
-              from {me.name} · {team.name}
+              from {me.name} {team ? `· ${team.name}` : ''}
             </span>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
               <Button
                 size="sm"
-                disabled={message.trim().length < 12 || sending}
+                disabled={message.trim().length < 5 || sending}
                 onClick={async () => {
                   setSending(true);
                   try {
                     await sendRequest({
                       toUserId: candidate.builder.id,
-                      teamId: team.id,
-                      hackathonId: team.hackathonId ?? null,
+                      teamId: team?.id ?? null,
+                      hackathonId: team?.hackathonId ?? null,
                       message: message.trim(),
                       roleOffered: role,
                     });

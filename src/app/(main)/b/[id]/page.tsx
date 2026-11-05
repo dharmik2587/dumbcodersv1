@@ -6,8 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { PublicSocialsSection } from "@/components/profile/PublicSocialsSection";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Check, ChevronDown, Loader2, Send, Sparkles, UserPlus } from "lucide-react";
-import { byIdMap, useActiveTeam, useMe, useApiStore } from "@/client/store/apiStore";
+import { ArrowLeft, Check, ChevronDown, Loader2, MessageSquare, Send, Sparkles, UserPlus } from "lucide-react";
+import { byIdMap, useActiveTeam, useMe, useApiStore, mapProfileToBuilder } from "@/client/store/apiStore";
 import { ROLE_LABEL, ROLES, type RoleKey } from "@/client/types";
 import { CLUSTER_NAME, CLUSTER_ORDER } from "@/client/data/seed";
 import {
@@ -501,17 +501,20 @@ function CandidateRow({
                     ))}
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link href={`/messages?user=${b.id}`}>
+                    <Button size="sm" variant="outline" className="gap-1.5 border-line hover:border-accent hover:text-accent">
+                      <MessageSquare size={12} /> Message
+                    </Button>
+                  </Link>
                   {reqStatus === "pending" ? (
                     <Button size="sm" disabled variant="outline" className="border-accent/40 text-accent cursor-default">
                       <Check size={12} className="text-accent" /> Sent
                     </Button>
                   ) : reqStatus === "accepted" ? (
-                    <Link href={`/messages?user=${b.id}`}>
-                      <Button size="sm" variant="outline" className="border-mint/40 text-mint hover:bg-mint/10">
-                        <Check size={12} /> Connected
-                      </Button>
-                    </Link>
+                    <Button size="sm" variant="outline" className="border-mint/40 text-mint cursor-default" disabled>
+                      <Check size={12} /> Connected
+                    </Button>
                   ) : reqStatus === "rejected" || reqStatus === "withdrawn" ? (
                     <Button size="sm" onClick={onCompose}>
                       <UserPlus size={12} /> Send again
@@ -553,20 +556,20 @@ function RequestComposer({
 
   return (
     <Modal open={!!candidate} onClose={onClose} title="collaboration request">
-      {candidate && team && (
+      {candidate && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 border border-line bg-raised px-3.5 py-3">
             <Avatar b={candidate.builder} size={32} link={false} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[13.5px] text-fg">{candidate.builder.name}</div>
               <div className="font-mono text-[10px] text-fg3">
-                complement {candidate.total}% · {hackathonName}
+                {team ? `complement ${candidate.total}% · ${hackathonName}` : `Collaborate with ${candidate.builder.name}`}
               </div>
             </div>
             <Sparkles size={14} className="text-mint" />
           </div>
 
-          <Field label="Requested role">
+          <Field label="Collaboration role">
             <Select value={role} onChange={(e) => setRole(e.target.value as RoleKey)}>
               {ROLES.map((r) => (
                 <option key={r} value={r}>{ROLE_LABEL[r]}</option>
@@ -576,33 +579,33 @@ function RequestComposer({
 
           <Field
             label="Message"
-            hint={`${message.length} / 240 — say what you need them to build, not just that you'd like them.`}
+            hint={`${message.length} / 240 — say what you want to build together.`}
           >
             <Textarea
               rows={4}
               maxLength={240}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder={`We're building for ${hackathonName} and ${team.name} is missing ${ROLE_LABEL[role].toLowerCase()}. ${candidate.fillsGaps[0] ? `You'd close our ${candidate.fillsGaps[0]} gap.` : ""}`}
+              placeholder={team ? `We're building for ${hackathonName} and ${team.name} is looking for ${ROLE_LABEL[role].toLowerCase()}.` : `Hey, would love to team up for upcoming hackathons!`}
             />
           </Field>
 
           <div className="flex items-center justify-between border-t border-line pt-4">
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg3">
-              from {me.name} · {team.name}
+              from {me.name} {team ? `· ${team.name}` : ''}
             </span>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={onClose} disabled={sending}>Cancel</Button>
               <Button
                 size="sm"
-                disabled={message.trim().length < 12 || sending}
+                disabled={message.trim().length < 5 || sending}
                 onClick={async () => {
                   setSending(true);
                   try {
                     await sendRequest({
                       toUserId: candidate.builder.id,
-                      teamId: team.id,
-                      hackathonId: team.hackathonId ?? null,
+                      teamId: team?.id ?? null,
+                      hackathonId: team?.hackathonId ?? null,
                       message: message.trim(),
                       roleOffered: role,
                     });
@@ -652,8 +655,12 @@ function BuilderProfile() {
     enabled: !!id,
   });
 
+  const profileBuilder = useMemo(() => {
+    return profileQuery.data ? mapProfileToBuilder(profileQuery.data) : null;
+  }, [profileQuery.data]);
+
   const requests = useApiStore((s) => s.requests);
-  const b = builders.find((x) => x.id === id);
+  const b = builders.find((x) => x.id === id || x.handle === id) ?? profileBuilder;
 
   const existingReq = useMemo(() => {
     if (!b?.id) return null;
@@ -665,6 +672,15 @@ function BuilderProfile() {
     });
   }, [requests, b?.id, me?.id]);
   const reqStatus = existingReq?.request?.status ?? existingReq?.status ?? (profileQuery.data?.requestStatus ?? b?.requestStatus);
+
+  if (!b && profileQuery.isLoading) {
+    return (
+      <div className="mx-auto max-w-[1100px] py-24 text-center">
+        <Loader2 size={24} className="mx-auto animate-spin text-accent" />
+        <p className="mt-3 font-mono text-xs text-fg3">Loading builder profile...</p>
+      </div>
+    );
+  }
 
   if (!b)
     return (
@@ -679,7 +695,16 @@ function BuilderProfile() {
   const scored =
     team && b.id !== me.id
       ? rankCandidates([b], me, team, byId, hackathon, {})[0]
-      : null;
+      : b && b.id !== me.id
+        ? {
+            builder: b,
+            total: 75,
+            signals: [],
+            reason: "Ready to collaborate on hackathons",
+            fillsGaps: [],
+            redundant: [],
+          }
+        : null;
 
   const completeness = Math.round(
     (b.bio ? 15 : 0) +
@@ -721,7 +746,7 @@ function BuilderProfile() {
           </div>
         </div>
         <div className="flex flex-col items-start gap-3 lg:col-span-4 lg:items-end">
-          {scored ? (
+          {team && scored ? (
             <div className="w-full border border-line bg-surface px-4 py-3.5 lg:w-auto">
               <div className="mono-label text-fg3">complement vs {team?.name}</div>
               <div className="mt-2 flex items-end gap-2">
@@ -734,28 +759,37 @@ function BuilderProfile() {
             </div>
           ) : (
             <div className="w-full border border-dashed border-line-strong px-4 py-3.5 text-[12.5px] text-fg2 lg:w-auto">
-              No active team — complement score unavailable.
+              {b.id === me.id ? "Your public builder profile." : "Open for hackathon collaboration."}
             </div>
           )}
-          {reqStatus === "pending" ? (
-            <Button disabled variant="outline" className="border-accent/40 text-accent cursor-default">
-              <Check size={13} className="text-accent" /> Sent
-            </Button>
-          ) : reqStatus === "accepted" ? (
-            <Link href={`/messages?user=${b.id}`}>
-              <Button variant="outline" className="border-mint/40 text-mint hover:bg-mint/10">
+
+          <div className="flex flex-wrap items-center gap-2">
+            {b.id !== me.id && (
+              <Link href={`/messages?user=${b.id}`}>
+                <Button variant="outline" className="gap-1.5 border-line hover:border-accent hover:text-accent">
+                  <MessageSquare size={13} />
+                  <span>Message</span>
+                </Button>
+              </Link>
+            )}
+            {reqStatus === "pending" ? (
+              <Button disabled variant="outline" className="border-accent/40 text-accent cursor-default">
+                <Check size={13} className="text-accent" /> Sent
+              </Button>
+            ) : reqStatus === "accepted" ? (
+              <Button variant="outline" className="border-mint/40 text-mint cursor-default" disabled>
                 <Check size={13} /> Connected
               </Button>
-            </Link>
-          ) : reqStatus === "rejected" || reqStatus === "withdrawn" ? (
-            <Button onClick={() => requireAuth("send a collaboration request", () => setComposing(true))}>
-              <UserPlus size={13} /> Send again
-            </Button>
-          ) : (
-            <Button onClick={() => requireAuth("send a collaboration request", () => setComposing(true))}>
-              <UserPlus size={13} /> Send request
-            </Button>
-          )}
+            ) : reqStatus === "rejected" || reqStatus === "withdrawn" ? (
+              <Button onClick={() => requireAuth("send a collaboration request", () => setComposing(true))}>
+                <UserPlus size={13} /> Send again
+              </Button>
+            ) : (
+              <Button onClick={() => requireAuth("send a collaboration request", () => setComposing(true))}>
+                <UserPlus size={13} /> Send request
+              </Button>
+            )}
+          </div>
         </div>
       </Reveal>
 

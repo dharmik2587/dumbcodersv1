@@ -13,7 +13,7 @@ export async function listRequests(userId: string, direction: 'received' | 'sent
   const rows = await db
     .select({ request: teamRequests, from: profiles, team: teams })
     .from(teamRequests)
-    .innerJoin(profiles, eq(teamRequests.fromUserId, profiles.id))
+    .leftJoin(profiles, eq(teamRequests.fromUserId, profiles.id))
     .leftJoin(teams, eq(teamRequests.teamId, teams.id))
     .where(condition)
     .orderBy(desc(teamRequests.createdAt));
