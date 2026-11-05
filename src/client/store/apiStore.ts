@@ -24,15 +24,21 @@ export function mapProfileToBuilder(profile: Record<string, unknown> | null | un
   
   // Map skills to taxonomy clusters
   const rawSkills: string[] = Array.isArray(profile.skills) ? (profile.skills as string[]) : [];
+  const storedLevels: Record<string, unknown> =
+    profile.skillLevels && typeof profile.skillLevels === 'object' ? (profile.skillLevels as Record<string, unknown>) : {};
   const skills = rawSkills.map((s: string) => {
     const meta = CLUSTERS.find(
       (c) => c.label.toLowerCase() === s.toLowerCase() || c.label.toLowerCase().replace(/[^a-z]+/g, '-') === s.toLowerCase()
     );
+    const id = meta ? meta.label.toLowerCase().replace(/[^a-z]+/g, '-') : s.toLowerCase().replace(/[^a-z]+/g, '-');
+    const stored = storedLevels[id];
+    // Older profiles saved before levels were persisted default to the top level, as before.
+    const level = (stored === 1 || stored === 2 || stored === 3 ? stored : 3) as 1 | 2 | 3;
     return {
-      id: meta ? meta.label.toLowerCase().replace(/[^a-z]+/g, '-') : s.toLowerCase().replace(/[^a-z]+/g, '-'),
+      id,
       label: meta ? meta.label : s,
       cluster: meta ? meta.cluster : 'interface',
-      level: 3 as const,
+      level,
       verified: true,
     };
   });
@@ -57,10 +63,16 @@ export function mapProfileToBuilder(profile: Record<string, unknown> | null | un
 
   const weeklyHours = availability.reduce((acc, slot) => acc + (slot.end - slot.start), 0) || 16;
 
-  const collegeObj = profile.college as { shortName?: string; name?: string } | string | undefined;
-  const collegeStr = typeof collegeObj === 'object' && collegeObj !== null
-    ? (collegeObj.shortName || collegeObj.name || (profile.collegeName as string) || 'Engineering College')
-    : (typeof collegeObj === 'string' && collegeObj ? collegeObj : ((profile.collegeName as string) || 'Engineering College'));
+  const collegeObj = profile.college as { shortName?: string | null; name?: string } | string | null | undefined;
+  const fallbackCollege = typeof profile.collegeName === 'string' ? profile.collegeName : '';
+  const collegeFullName =
+    typeof collegeObj === 'object' && collegeObj !== null
+      ? (collegeObj.name || fallbackCollege)
+      : typeof collegeObj === 'string' && collegeObj
+      ? collegeObj
+      : fallbackCollege;
+  const collegeStr =
+    typeof collegeObj === 'object' && collegeObj !== null ? (collegeObj.shortName || collegeFullName) : collegeFullName;
 
   const currentYear = new Date().getFullYear();
   const gradYear = typeof profile.graduationYear === 'number' ? profile.graduationYear : undefined;
@@ -78,8 +90,20 @@ export function mapProfileToBuilder(profile: Record<string, unknown> | null | un
   const prefRole = typeof profile.rolePreference === 'string' ? profile.rolePreference.toLowerCase() : 'frontend';
   const role: RoleKey = validRoles.includes(prefRole as RoleKey) ? (prefRole as RoleKey) : 'frontend';
 
+  const secondary = (Array.isArray(profile.secondaryRoles) ? (profile.secondaryRoles as unknown[]) : [])
+    .filter((r): r is RoleKey => typeof r === 'string' && validRoles.includes(r as RoleKey) && r !== role)
+    .slice(0, 2);
+
+  const goal: 'win' | 'learn' | 'ship' =
+    profile.goal === 'win' || profile.goal === 'learn' || profile.goal === 'ship' ? profile.goal : 'win';
+
   const gh = profile.github as { topRepos?: { name: string; lang: string; stars: number; url: string }[] } | undefined;
-  const repos = Array.isArray(gh?.topRepos) ? gh.topRepos : [];
+  // customRepos: NULL = never edited; an array (even empty) is exactly what the user saved.
+  const repos = Array.isArray(profile.customRepos)
+    ? (profile.customRepos as { name: string; lang: string; stars: number; url: string }[])
+    : Array.isArray(gh?.topRepos)
+    ? gh.topRepos
+    : [];
 
   return {
     id: typeof profile.id === 'string' ? profile.id : String(profile.id || ''),
@@ -88,13 +112,14 @@ export function mapProfileToBuilder(profile: Record<string, unknown> | null | un
     name,
     initials,
     college: collegeStr,
+    collegeName: collegeFullName || collegeStr,
     year: yearNum,
-    branch: typeof profile.branch === 'string' ? profile.branch : 'Computer Science',
-    city: typeof profile.city === 'string' ? profile.city : 'Campus',
+    branch: typeof profile.branch === 'string' ? profile.branch : '',
+    city: typeof profile.city === 'string' ? profile.city : '',
     role,
-    secondary: [],
+    secondary,
     avatarUrl: typeof profile.avatarUrl === 'string' ? profile.avatarUrl : undefined,
-    goal: 'win',
+    goal,
     bio: typeof profile.bio === 'string' ? profile.bio : '',
     skills,
     repos,
@@ -133,6 +158,8 @@ type State = {
   me: Builder | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** True only once the real profile row has been read from the database (not the auth placeholder). */
+  profileLoaded: boolean;
 
   // Data state
   hackathons: Hackathon[];
@@ -185,6 +212,7 @@ export const useApiStore = create<State>()(
       me: null,
       isAuthenticated: false,
       isLoading: true,
+      profileLoaded: false,
       hackathons: [],
       teams: [],
       builders: [],
@@ -209,10 +237,10 @@ export const useApiStore = create<State>()(
           avatar: meta.avatar_url || meta.picture || '',
           avatarUrl: meta.avatar_url || meta.picture || '',
           initials,
-          college: meta.college || 'Engineering College',
+          college: meta.college || '',
           year: 3,
-          branch: 'Computer Science',
-          city: 'India',
+          branch: '',
+          city: '',
           role: 'frontend',
           secondary: ['backend'],
           goal: 'win',
@@ -250,11 +278,11 @@ export const useApiStore = create<State>()(
               console.warn('Data loading during auth init:', e);
             }
           } else {
-            set({ isAuthenticated: false, isLoading: false, me: null });
+            set({ isAuthenticated: false, isLoading: false, me: null, profileLoaded: false });
           }
         } catch (error) {
           console.error('Auth initialization error:', error);
-          set({ isAuthenticated: false, isLoading: false, me: null });
+          set({ isAuthenticated: false, isLoading: false, me: null, profileLoaded: false });
         }
 
         // Listen for auth state changes (handles OAuth callback, tab sync, etc.)
@@ -274,6 +302,7 @@ export const useApiStore = create<State>()(
               isAuthenticated: false,
               isLoading: false,
               me: null,
+              profileLoaded: false,
               teams: [],
               builders: [],
               projects: [],
@@ -373,6 +402,7 @@ export const useApiStore = create<State>()(
           set({
             isAuthenticated: false,
             me: null,
+            profileLoaded: false,
             teams: [],
             builders: [],
             projects: [],
@@ -402,6 +432,7 @@ export const useApiStore = create<State>()(
           const mappedBuilder = mapProfileToBuilder(updated);
           set((s) => ({
             me: s.me ? { ...s.me, ...mappedBuilder } : mappedBuilder,
+            profileLoaded: true,
           }));
           get().pushToast({
             label: 'Profile saved',
@@ -511,11 +542,24 @@ export const useApiStore = create<State>()(
 
       // Load current user
       loadUser: async () => {
-        try {
-          const user = await api.getCurrentUser();
-          set({ me: mapProfileToBuilder(user) });
-        } catch (error) {
-          console.error('Failed to load user:', error);
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            const user = await api.getCurrentUser();
+            set({ me: mapProfileToBuilder(user), profileLoaded: true });
+            return;
+          } catch (error) {
+            console.error(`Failed to load user (attempt ${attempt}):`, error);
+            if (attempt === 2) {
+              // Without this the UI keeps showing placeholder data and looks like saved changes were lost.
+              get().pushToast({
+                label: 'Could not load your profile',
+                body: 'Your saved data is safe. Refresh the page to try again.',
+                tone: 'bad',
+              });
+            } else {
+              await new Promise((resolve) => setTimeout(resolve, 800));
+            }
+          }
         }
       },
 

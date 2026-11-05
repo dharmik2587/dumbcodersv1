@@ -22,6 +22,7 @@ import {
 import { ThemedRadar, useChartTokens } from "@/components/charts";
 import { CLUSTER_NAME, CLUSTER_ORDER } from "@/client/data/seed";
 import { cn } from "@/client/utils/cn";
+import { buildProfilePatch } from "@/client/lib/profile-payload";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SocialAccountsSection } from "@/components/profile/SocialAccountsSection";
@@ -33,6 +34,7 @@ export default function Profile() {
   const pushToast = useApiStore((s) => s.pushToast);
   const updateProfileApi = useApiStore((s) => s.updateProfile);
   const loadUser = useApiStore((s) => s.loadUser);
+  const profileLoaded = useApiStore((s) => s.profileLoaded);
   const queryClient = useQueryClient();
   const t = useChartTokens();
   const [dirty, setDirty] = useState(false);
@@ -52,21 +54,13 @@ export default function Profile() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['me'] });
       await queryClient.invalidateQueries({ queryKey: ['user-profile'] });
+      // Re-read from the database so what is on screen is exactly what was stored.
       await loadUser();
       setDirty(false);
-      pushToast({
-        label: 'Profile saved',
-        body: 'Your changes have been saved to your profile.',
-        tone: 'good',
-      });
     },
     onError: (err: unknown) => {
+      // The API store already shows the error toast; just keep the draft so nothing typed is lost.
       console.error("Profile update error:", err);
-      pushToast({
-        label: 'Save failed',
-        body: err instanceof Error ? err.message : 'Could not save profile changes.',
-        tone: 'bad',
-      });
     },
   });
 
@@ -76,26 +70,17 @@ export default function Profile() {
   };
 
   const handleSave = async () => {
-    const selectedSkills = me.skills
-      .filter((s) => s.level > 0)
-      .map((s) => s.label);
-
-    const currentYear = new Date().getFullYear();
-    const gradYear = me.year
-      ? (me.year >= 1980 && me.year <= 2100 ? me.year : currentYear + (4 - me.year))
-      : undefined;
-
-    await profileMutation.mutateAsync({
-      fullName: me.name,
-      college: me.college || undefined,
-      bio: me.bio || undefined,
-      branch: me.branch || undefined,
-      graduationYear: gradYear,
-      rolePreference: me.role,
-      skills: selectedSkills,
-      isOpenToTeam: me.openToTeams,
-      availability: JSON.stringify(me.availability),
-    });
+    const payload = buildProfilePatch(me, initialMe);
+    if (Object.keys(payload).length === 0) {
+      setDirty(false);
+      pushToast({ label: 'Nothing to save', body: 'You have no unsaved changes.', tone: 'info' });
+      return;
+    }
+    try {
+      await profileMutation.mutateAsync(payload);
+    } catch {
+      // Error toast already shown by the API store; the draft stays on screen for another try.
+    }
   };
 
   const setSkillLevel = (id: string, level: 0 | 1 | 2 | 3) => {
@@ -149,7 +134,7 @@ export default function Profile() {
             )}
             <Button
               variant={dirty ? "primary" : "outline"}
-              disabled={profileMutation.isPending}
+              disabled={profileMutation.isPending || !profileLoaded}
               onClick={handleSave}
             >
               <Save size={13} /> {profileMutation.isPending ? "Saving..." : dirty ? "Save changes" : "Saved"}
@@ -176,7 +161,7 @@ export default function Profile() {
                   <Input value={me.studentCode || 'Not Assigned'} disabled className="bg-hover font-mono text-accent" />
                 </Field>
                 <Field label="college">
-                  <Input value={me.college} onChange={(e) => patch({ college: e.target.value })} />
+                  <Input value={me.collegeName ?? me.college} onChange={(e) => patch({ collegeName: e.target.value })} />
                 </Field>
                 <Field label="branch">
                   <Input value={me.branch} onChange={(e) => patch({ branch: e.target.value })} />

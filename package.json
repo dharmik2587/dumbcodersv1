@@ -16,6 +16,7 @@
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config=drizzle.config.ts",
+    "db:doctor": "tsx scripts/db-doctor.ts",
     "db:seed": "node --env-file=.env.local --import=tsx src/lib/db/seed/index.ts",
     "hackathons:load": "python3 backend/features/hackathon_loader/hackathon_loader_1.py --sync",
     "sync:hackathons": "node --env-file=.env --import=tsx scripts/sync-all-hackathons.ts"

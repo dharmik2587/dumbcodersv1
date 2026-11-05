@@ -10,6 +10,14 @@ services:
         value: 20
       - key: PORT
         value: 10000
+      # Without MESSAGE_ENCRYPTION_KEY every message send/list fails in production.
+      - key: MESSAGE_ENCRYPTION_KEY
+        sync: false
+      # Browser Pusher keys are inlined at build time, so they must exist before the build runs.
+      - key: NEXT_PUBLIC_PUSHER_KEY
+        sync: false
+      - key: NEXT_PUBLIC_PUSHER_CLUSTER
+        value: ap2
 
   - type: cron
     name: sync-hackathons-cron

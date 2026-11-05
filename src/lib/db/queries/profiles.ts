@@ -1,8 +1,16 @@
-import { and, eq, ilike, or } from 'drizzle-orm';
+import { and, eq, ilike, ne, or } from 'drizzle-orm';
 import { getCoreDb } from '@/lib/db/core';
 import { colleges, githubData, profiles } from '@/lib/db/schema/core';
 import type { ProfileUpdate } from '@/lib/validations/profile';
 import { calculateProfileComplete } from '@/lib/profile/completion';
+
+/** Thrown when a requested handle is already used by another student. Mapped to HTTP 409 by the route. */
+export class ProfileConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProfileConflictError';
+  }
+}
 
 export async function getProfileById(id: string) {
   const db = getCoreDb();
@@ -100,24 +108,46 @@ export async function updateProfile(id: string, patch: ProfileUpdate) {
     }
   }
 
+  // Handle (username) must stay unique; check first for a friendly error, DB index is the safety net.
+  if (patch.username && patch.username !== current.username) {
+    const taken = await db
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(and(eq(profiles.username, patch.username), ne(profiles.id, id)))
+      .limit(1);
+    if (taken[0]) throw new ProfileConflictError('That handle is already taken. Try another one.');
+  }
+
   // Strip non-column fields before updating profiles table
   const { college: _c, collegeName: _cn, ...profileFields } = patch;
+  // Drop undefined so an omitted field can never overwrite stored data.
+  const definedFields = Object.fromEntries(
+    Object.entries(profileFields).filter(([, value]) => value !== undefined),
+  ) as typeof profileFields;
   const updateData = {
-    ...profileFields,
+    ...definedFields,
     ...(collegeId !== undefined ? { collegeId } : {}),
   };
 
   const nextProfile = { ...current, ...updateData };
   const profileComplete = calculateProfileComplete(nextProfile);
-  const [updated] = await db
-    .update(profiles)
-    .set({
-      ...updateData,
-      profileComplete,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(profiles.id, id)))
-    .returning();
+  let updated: typeof profiles.$inferSelect | undefined;
+  try {
+    [updated] = await db
+      .update(profiles)
+      .set({
+        ...updateData,
+        profileComplete,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(profiles.id, id)))
+      .returning();
+  } catch (error: unknown) {
+    const code = (error as { code?: string; cause?: { code?: string } })?.code
+      ?? (error as { cause?: { code?: string } })?.cause?.code;
+    if (code === '23505') throw new ProfileConflictError('That handle is already taken. Try another one.');
+    throw error;
+  }
 
   if (!updated) return null;
 

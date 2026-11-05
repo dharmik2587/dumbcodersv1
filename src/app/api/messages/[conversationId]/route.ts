@@ -29,9 +29,12 @@ export async function GET(
     const messages = await listConversationMessages(conversationId, user.id);
     return success(messages);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Failed to fetch messages';
-    const status = msg.includes('Unauthorized') ? 403 : 500;
-    return failure('INTERNAL_ERROR', msg, status);
+    const msg = error instanceof Error ? error.message : '';
+    if (msg.includes('Unauthorized')) {
+      return failure('FORBIDDEN', 'You are not part of this conversation.', 403);
+    }
+    console.error('GET /api/messages/[conversationId] failed:', error);
+    return failure('INTERNAL_ERROR', 'Could not load messages right now. Please try again.', 500);
   }
 }
 
@@ -113,8 +116,11 @@ export async function POST(
     // Always return HTTP 201 as message is safely committed to Postgres
     return success(message, { status: 201 });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Failed to send message';
-    const status = msg.includes('Unauthorized') ? 403 : 500;
-    return failure('INTERNAL_ERROR', msg, status);
+    const msg = error instanceof Error ? error.message : '';
+    if (msg.includes('Unauthorized')) {
+      return failure('FORBIDDEN', 'You are not part of this conversation.', 403);
+    }
+    console.error('POST /api/messages/[conversationId] failed:', error);
+    return failure('INTERNAL_ERROR', 'Message could not be sent. Please try again.', 500);
   }
 }

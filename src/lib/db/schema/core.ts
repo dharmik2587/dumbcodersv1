@@ -26,6 +26,8 @@ export const colleges = pgTable(
   }),
 );
 
+export type ProfileRepo = { name: string; lang: string; stars: number; url: string };
+
 export const profiles = pgTable(
   'profiles',
   {
@@ -50,6 +52,11 @@ export const profiles = pgTable(
     onboardingDone: boolean('onboarding_done').notNull().default(false),
     profileComplete: integer('profile_complete').notNull().default(0),
     isOpenToTeam: boolean('is_open_to_team').notNull().default(true),
+    goal: text('goal'),
+    secondaryRoles: text('secondary_roles').array().notNull().default([]),
+    skillLevels: jsonb('skill_levels').$type<Record<string, number>>().notNull().default({}),
+    // NULL = never edited (nothing to show); [] = user deliberately cleared the list.
+    customRepos: jsonb('custom_repos').$type<ProfileRepo[]>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },

@@ -44,6 +44,8 @@ export type Builder = {
   name: string;
   initials: string;
   college: string;
+  /** Full, un-abbreviated college name as stored in the database (used by the profile editor). */
+  collegeName?: string;
   year: number;
   branch: string;
   city: string;

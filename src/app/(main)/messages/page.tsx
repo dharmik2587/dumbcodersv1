@@ -173,6 +173,8 @@ function MessagesContent() {
       return body.data || [];
     },
     refetchOnWindowFocus: true,
+    // Polling fallback: new conversations/messages still appear if realtime (Pusher) is not configured.
+    refetchInterval: 8000,
   });
 
   // Sync conversationId from query param
@@ -235,7 +237,7 @@ function MessagesContent() {
   });
 
   useEffect(() => {
-    if (initialUserId && me?.id && initialUserId !== me.id) {
+    if (initialUserId && me?.id && me.id !== 'me-guest' && initialUserId !== me.id) {
       startMutation.mutate(initialUserId);
     }
   }, [initialUserId, me?.id]);
@@ -267,6 +269,7 @@ function MessagesContent() {
     },
     enabled: Boolean(activeConversationId),
     refetchOnWindowFocus: true,
+    refetchInterval: 4000,
   });
 
   // 4. Send message mutation with Optimistic UI and Retry capabilities

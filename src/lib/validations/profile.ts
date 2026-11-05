@@ -15,8 +15,32 @@ const optionalUrl = z
   .nullable()
   .optional();
 
+/** Only http(s) links are allowed so a saved repo URL can never become a javascript: link. */
+const httpUrl = z
+  .string()
+  .trim()
+  .max(300)
+  .url()
+  .refine((value) => /^https?:\/\//i.test(value), 'Repository links must start with http:// or https://');
+
+const repoSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  lang: z.string().trim().max(40),
+  stars: z.number().int().min(0).max(10_000_000),
+  url: httpUrl,
+});
+
 export const profileUpdateSchema = z.object({
   fullName: optionalString(100),
+  username: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(
+      /^[a-z0-9][a-z0-9_-]{2,29}$/,
+      'Handle must be 3-30 characters: letters, numbers, "_" or "-", starting with a letter or number.',
+    )
+    .optional(),
   bio: optionalString(500),
   college: optionalString(200),
   collegeName: optionalString(200),
@@ -43,10 +67,16 @@ export const profileUpdateSchema = z.object({
     }, z.union([z.number().int().min(1980).max(2100), z.null()]))
     .nullable()
     .optional(),
-  skills: z.array(z.string().trim().min(1).max(50)).max(30).optional().default([]),
+  // NOTE: no `.default([])` on the array fields below. A default would turn "field not sent"
+  // into "set to empty", silently wiping a user's skills/interests on any partial update.
+  skills: z.array(z.string().trim().min(1).max(50)).max(30).optional(),
+  skillLevels: z.record(z.string().trim().min(1).max(60), z.number().int().min(1).max(3)).optional(),
   rolePreference: optionalString(80),
-  hackathonInterests: z.array(z.string().trim().min(1).max(80)).max(20).optional().default([]),
+  secondaryRoles: z.array(z.string().trim().min(1).max(40)).max(3).optional(),
+  goal: z.enum(['win', 'learn', 'ship']).nullable().optional(),
+  hackathonInterests: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
   availability: optionalString(4000),
+  customRepos: z.array(repoSchema).max(12).nullable().optional(),
   portfolioUrl: optionalUrl,
   linkedinUrl: optionalUrl,
   onboardingDone: z.boolean().optional(),

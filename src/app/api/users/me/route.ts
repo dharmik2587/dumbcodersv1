@@ -1,13 +1,14 @@
 import { NextRequest } from 'next/server';
 import { getOptionalUser, requireUser } from '@/lib/auth/server';
 import { hasCoreDatabase } from '@/lib/db/core';
-import { getFullProfileById, updateProfile } from '@/lib/db/queries/profiles';
+import { getFullProfileById, ProfileConflictError, updateProfile } from '@/lib/db/queries/profiles';
 import { ensureStudentProfile } from '@/lib/profile/student';
 import { failure, success } from '@/lib/http';
 import { profileUpdateSchema } from '@/lib/validations/profile';
 import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const user = await getOptionalUser();
@@ -52,8 +53,11 @@ export async function PATCH(request: NextRequest) {
     if (!updated) return failure('PROFILE_NOT_FOUND', 'Profile could not be updated.', 404);
     return success(updated);
   } catch (error: unknown) {
+    if (error instanceof ProfileConflictError) {
+      return failure('CONFLICT', error.message, 409);
+    }
+    // Log the real cause server-side; never echo database internals to the browser.
     console.error('PATCH /api/users/me failed:', error);
-    const msg = error instanceof Error ? error.message : String(error);
-    return failure('DATABASE_ERROR', `Could not update your profile: ${msg}`, 500);
+    return failure('DATABASE_ERROR', 'Could not save your profile right now. Please try again.', 500);
   }
 }

@@ -57,6 +57,13 @@
       "when": 1789674773672,
       "tag": "0007_moaning_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793836800000,
+      "tag": "0008_messaging_crypto_and_profile_fields",
+      "breakpoints": true
     }
   ]
 }
