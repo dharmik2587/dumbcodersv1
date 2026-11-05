@@ -6,6 +6,8 @@ import { markExpiredHackathons, upsertHackathonSource } from '@/lib/db/queries/h
 import { ingestionRuns } from '@/lib/db/schema/core';
 import { getProviders, type HackathonProvider, type NormalizedHackathon } from '@/lib/hackathons/providers';
 import { failure, success } from '@/lib/http';
+import { getOptionalUser } from '@/lib/auth/server';
+import { enforceRateLimit } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,8 +39,14 @@ interface ProviderRunResult {
 }
 
 export async function GET(request: NextRequest) {
-  if (!authenticateCron(request)) {
-    return failure('UNAUTHORIZED', 'Invalid or missing cron credentials.', 401);
+  const isCronAuth = authenticateCron(request);
+  if (!isCronAuth) {
+    const user = await getOptionalUser();
+    if (!user) {
+      return failure('UNAUTHORIZED', 'Invalid or missing cron credentials.', 401);
+    }
+    const rl = await enforceRateLimit(`cron-refresh:${user.id}`, 2, 60);
+    if (!rl.success && rl.response) return rl.response;
   }
 
   if (!hasCoreDatabase()) {

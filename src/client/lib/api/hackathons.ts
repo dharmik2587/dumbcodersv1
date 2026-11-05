@@ -158,5 +158,9 @@ export async function getBookmarkedHackathons(): Promise<Hackathon[]> {
 }
 
 export async function refreshHackathons(): Promise<void> {
-  await get('/api/cron/ingest');
+  try {
+    await get('/api/cron/ingest');
+  } catch (error) {
+    console.warn('Backend hackathon ingest trigger skipped or rate-limited:', error);
+  }
 }
