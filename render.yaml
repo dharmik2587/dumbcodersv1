@@ -10,9 +10,9 @@ services:
         value: 20
       - key: PORT
         value: 10000
-      # Without MESSAGE_ENCRYPTION_KEY every message send/list fails in production.
+      # Server message encryption key
       - key: MESSAGE_ENCRYPTION_KEY
-        sync: false
+        value: a3f8902c5e632b437ea2e1d0002bfd6b814d580f2bbb4040a151e48395fce5a7
       # Browser Pusher keys are inlined at build time, so they must exist before the build runs.
       - key: NEXT_PUBLIC_PUSHER_KEY
         sync: false

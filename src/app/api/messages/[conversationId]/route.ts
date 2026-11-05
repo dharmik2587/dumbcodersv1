@@ -121,6 +121,6 @@ export async function POST(
       return failure('FORBIDDEN', 'You are not part of this conversation.', 403);
     }
     console.error('POST /api/messages/[conversationId] failed:', error);
-    return failure('INTERNAL_ERROR', 'Message could not be sent. Please try again.', 500);
+    return failure('INTERNAL_ERROR', msg ? `Message could not be sent: ${msg}` : 'Message could not be sent. Please try again.', 500);
   }
 }
